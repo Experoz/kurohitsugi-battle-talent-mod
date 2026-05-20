@@ -1009,6 +1009,14 @@ MonoBehaviour:
     m_Address: LuaScript/EZ_FlyKurohitsugiExplodeScript
     m_ReadOnly: 0
     m_SerializedLabels: []
+  - m_GUID: 76425e2646a20b647b021ff9ca971ff8
+    m_Address: FlyObj/EXP_ElementBullet_Kurohitsugi
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: c63be6ea78a3b654f8719e34e34abe1a
+    m_Address: KurohitsugiDamageBullet
+    m_ReadOnly: 0
+    m_SerializedLabels: []
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 26cc198b6f316b347a0fe5276ff50b16, type: 2}
   m_SchemaSet:
