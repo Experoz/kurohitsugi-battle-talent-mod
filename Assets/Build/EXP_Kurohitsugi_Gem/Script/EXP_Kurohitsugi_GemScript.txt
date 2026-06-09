@@ -2130,6 +2130,12 @@ function spellFireBall:OnChargeBegin()
         return
     end
 
+    -- Mantiene la mano in posa spell aperta durante il charge,
+    -- come fa la Fireball base in WMD_SpellThrowScript.
+    pcall(function()
+        self:SetHandPose(true)
+    end)
+
     self:ResetKurohitsugiCast()
 
     self:ShowKurohitsugiPreview()
@@ -2138,6 +2144,11 @@ function spellFireBall:OnChargeBegin()
 end
 
 function spellFireBall:OnChargeRelease()
+    -- Riporta la mano alla posa normale quando finisce il charge.
+    pcall(function()
+        self:SetHandPose(false)
+    end)
+
     -- Se durante una sequenza attiva arriva un release, lo ignoriamo.
     -- Importante: non chiamiamo ResetKurohitsugiCast e non fermiamo la sequenza in corso.
     if self.isSequenceRunning then
@@ -2158,6 +2169,11 @@ function spellFireBall:OnChargeRelease()
 end
 
 function spellFireBall:OnChargeCancel()
+    -- Riporta la mano alla posa normale anche se il charge viene cancellato.
+    pcall(function()
+        self:SetHandPose(false)
+    end)
+
     if self.isSequenceRunning then
         return
     end
