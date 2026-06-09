@@ -59,17 +59,17 @@ local spellFireBall = {
     castLockedRot = nil,
 
     -- Timing stile sequenza Unity/Inspector
-    delayBeforeStart = 0.10,
+    delayBeforeStart = 0.05,
 
-    verticalLinesDuration = 0.80,
-    topLinesDuration = 0.50,
-    linesDelay = 0.25,
+    verticalLinesDuration = 0.45,
+    topLinesDuration = 0.25,
+    linesDelay = 0.1,
 
-    wallsGrowDuration = 0.50,
-    wallsDelay = 0.35,
+    wallsGrowDuration = 0.45,
+    wallsDelay = 0.23,
 
-    topGrowDuration = 0.30,
-    topDelay = 0.25,
+    topGrowDuration = 0.16,
+    topDelay = 0.08,
 
     effectsDelay = 0.25,
 
@@ -86,32 +86,32 @@ local spellFireBall = {
     -- Gravity Zone Kurohitsugi
     gravityZoneStarted = false,
     gravityZoneEndTime = 0,
-    gravityZoneDuration = 1.00,
+    gravityZoneDuration = 1.40,
     gravityZoneRadius = 4.0,
-    gravityZoneCenterHeight = 2.35,
+    gravityZoneCenterHeight = 2.2,
     gravityZoneTickInterval = 0.03,
     gravityZoneLastTick = 0,
 
     -- V7: riprendiamo la potenza della V3, che era quella che dava gravità e danni.
     -- La differenza è che il push finale non usa più direzioni/velocity aggressive su tutto il ragdoll.
-    gravityPullForce = 80,
-    gravityLiftForce = 8,
-    gravityDownForce = 0,
+    gravityPullForce = 100,
+    gravityLiftForce = 10,
+    gravityDownForce = 5,
     gravityOffTime = 2.20,
     gravityKnockout = true,
 
     -- Push sincronizzato con le spike: centro + basso, senza componenti random/outward.
     gravitySpikePushDone = false,
     gravitySpikeCenterForce = 8,
-    gravitySpikeSlamForce = 26,
+    gravitySpikeSlamForce = 50,
 
     -- Stop gravity prima della frantumazione: piccolo colpo di chiusura, non esplosivo.
-    gravityFinalSlamForce = 10,
+    gravityFinalSlamForce = 30,
     gravityFinalCenterForce = 0,
     gravityFinalSlamDone = false,
     gravityFinalVelocityClampY = -6.0,
 
-	gravityStartExtraDelay = 2.00,
+	gravityStartExtraDelay = 1.50,
 	gravityEndBeforeBreak = 0.16,
     -- Tenuto acceso perché nella V3 era ciò che faceva davvero funzionare risucchio e danni.
     -- Viene usato durante l'attrazione, ma NON per il push finale.
@@ -141,7 +141,7 @@ local spellFireBall = {
     kurohitsugiRainTargetHeight = 0.85,
     kurohitsugiRainRadius = 1.28,
     kurohitsugiRainPulseIndex = 0,
-    kurohitsugiRainMaxPulseCount = 3,
+    kurohitsugiRainMaxPulseCount = 4,
     kurohitsugiRainTargetInwardMultiplier = 0.45,
 
     -- Filtro sicurezza: evita che la Gravity Zone tocchi player/mani/gemma,
