@@ -23,19 +23,6 @@ local spellFireBall = {
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
 
-    -- Ground detection: appoggia target circle e castRoot al terreno reale.
-    -- Serve soprattutto su scale, rampe e dislivelli, dove una Y fissa fa restare il Kurohitsugi sospeso o sotto terra.
-    groundRayStartHeight = 8.0,
-    groundRayDistance = 24.0,
-    groundRayMinValidY = -20.0,
-
-    -- Ground fix V2:
-    -- 1) evita muri/pareti filtrando la normale del raycast;
-    -- 2) campiona più punti sotto l'area del cubo;
-    -- 3) usa il punto più basso tra le superfici valide, così sulle scale il fondo non resta aperto.
-    groundMinNormalY = 0.55,
-    groundFootprintRadius = 1.35,
-
     rotationSpeed = 130,
     targetMoveMultiplier = 34.0,
     maxTargetMove = 9.0,
@@ -59,17 +46,17 @@ local spellFireBall = {
     castLockedRot = nil,
 
     -- Timing stile sequenza Unity/Inspector
-    delayBeforeStart = 0.05,
+    delayBeforeStart = 0.10,
 
-    verticalLinesDuration = 0.45,
-    topLinesDuration = 0.25,
-    linesDelay = 0.1,
+    verticalLinesDuration = 0.80,
+    topLinesDuration = 0.50,
+    linesDelay = 0.25,
 
-    wallsGrowDuration = 0.45,
-    wallsDelay = 0.23,
+    wallsGrowDuration = 0.50,
+    wallsDelay = 0.35,
 
-    topGrowDuration = 0.16,
-    topDelay = 0.08,
+    topGrowDuration = 0.30,
+    topDelay = 0.25,
 
     effectsDelay = 0.25,
 
@@ -86,32 +73,32 @@ local spellFireBall = {
     -- Gravity Zone Kurohitsugi
     gravityZoneStarted = false,
     gravityZoneEndTime = 0,
-    gravityZoneDuration = 1.40,
+    gravityZoneDuration = 1.00,
     gravityZoneRadius = 4.0,
-    gravityZoneCenterHeight = 2.2,
+    gravityZoneCenterHeight = 2.35,
     gravityZoneTickInterval = 0.03,
     gravityZoneLastTick = 0,
 
     -- V7: riprendiamo la potenza della V3, che era quella che dava gravità e danni.
     -- La differenza è che il push finale non usa più direzioni/velocity aggressive su tutto il ragdoll.
-    gravityPullForce = 100,
-    gravityLiftForce = 10,
-    gravityDownForce = 5,
+    gravityPullForce = 80,
+    gravityLiftForce = 8,
+    gravityDownForce = 0,
     gravityOffTime = 2.20,
     gravityKnockout = true,
 
     -- Push sincronizzato con le spike: centro + basso, senza componenti random/outward.
     gravitySpikePushDone = false,
     gravitySpikeCenterForce = 8,
-    gravitySpikeSlamForce = 50,
+    gravitySpikeSlamForce = 26,
 
     -- Stop gravity prima della frantumazione: piccolo colpo di chiusura, non esplosivo.
-    gravityFinalSlamForce = 30,
+    gravityFinalSlamForce = 10,
     gravityFinalCenterForce = 0,
     gravityFinalSlamDone = false,
     gravityFinalVelocityClampY = -6.0,
 
-	gravityStartExtraDelay = 1.50,
+	gravityStartExtraDelay = 2.00,
 	gravityEndBeforeBreak = 0.16,
     -- Tenuto acceso perché nella V3 era ciò che faceva davvero funzionare risucchio e danni.
     -- Viene usato durante l'attrazione, ma NON per il push finale.
@@ -141,12 +128,32 @@ local spellFireBall = {
     kurohitsugiRainTargetHeight = 0.85,
     kurohitsugiRainRadius = 1.28,
     kurohitsugiRainPulseIndex = 0,
-    kurohitsugiRainMaxPulseCount = 4,
+    kurohitsugiRainMaxPulseCount = 3,
     kurohitsugiRainTargetInwardMultiplier = 0.45,
 
     -- Filtro sicurezza: evita che la Gravity Zone tocchi player/mani/gemma,
     -- ma senza bloccare i nemici solo perché sono vicini al player.
     gravityMinDistanceFromPlayer = 0.35,
+
+    -- Reiatsu Bind durante il charge:
+    -- aura di pressione spirituale attorno al player, indipendente dalla zona di cast.
+    -- V1 prudente: lavora solo sui logic target, non attira verso il player e non tocca oggetti fisici secondari.
+    chargeReiatsuEnabled = true,
+    chargeReiatsuActive = false,
+    chargeReiatsuRadius = 8.0,
+    chargeReiatsuCenterHeight = 1.1,
+    chargeReiatsuTickInterval = 0.05,
+    chargeReiatsuLastTick = 0,
+
+    -- V1.5: manteniamo la pressione fisica della V1, ma la riduciamo per evitare vibrazione eccessiva.
+    -- Aggiungiamo anche DoStiff ispirato alla Telekinesis, senza usare joint ad area.
+    chargeReiatsuDownForce = 10,
+    chargeReiatsuVelocityDamping = 0.22,
+    chargeReiatsuGravityOffTime = 0.10,
+    chargeReiatsuKnockout = false,
+    chargeReiatsuAngularDamping = 0.35,
+    chargeReiatsuUseStiff = true,
+    chargeReiatsuStiffDuration = 0.75,
 
     startedEffects = false,
     startedSpikes = false,
@@ -520,229 +527,12 @@ function spellFireBall:ClampFlatOffset(offset)
     return flat
 end
 
-function spellFireBall:GetRaycastArrayCount(hits)
-    if hits == nil then return 0 end
-
-    local count = 0
-
-    pcall(function()
-        count = hits.Length
-    end)
-
-    pcall(function()
-        if (count == nil or count == 0) and hits.Count ~= nil then
-            count = hits.Count
-        end
-    end)
-
-    if count == nil then
-        count = 0
-    end
-
-    return count
-end
-
-function spellFireBall:GetRaycastArrayItem(hits, index)
-    if hits == nil then return nil end
-
-    local item = nil
-
-    pcall(function()
-        item = hits[index]
-    end)
-
-    pcall(function()
-        if item == nil and hits.get_Item ~= nil then
-            item = hits:get_Item(index)
-        end
-    end)
-
-    return item
-end
-
-function spellFireBall:GetRaycastHitPoint(hit)
-    if hit == nil then return nil end
-
-    local point = nil
-
-    pcall(function()
-        point = hit.point
-    end)
-
-    return point
-end
-
-function spellFireBall:GetRaycastHitCollider(hit)
-    if hit == nil then return nil end
-
-    local col = nil
-
-    pcall(function()
-        col = hit.collider
-    end)
-
-    return col
-end
-
-function spellFireBall:GetRaycastHitNormal(hit)
-    if hit == nil then return nil end
-
-    local normal = nil
-
-    pcall(function()
-        normal = hit.normal
-    end)
-
-    return normal
-end
-
-function spellFireBall:IsValidGroundCollider(col)
-    if col == nil then return false end
-
-    local valid = true
-
-    -- Non appoggiamo mai il target su trigger/zone invisibili.
-    pcall(function()
-        if col.isTrigger then
-            valid = false
-        end
-    end)
-
-    -- Evita di colpire parti della gemma, preview, Kurohitsugi stesso, mani/player o oggetti tenuti.
-    pcall(function()
-        if valid and self:NameLooksLikePlayerOrHeldObject(col) then
-            valid = false
-        end
-    end)
-
-    pcall(function()
-        if valid and col.transform ~= nil and self:IsTransformLinkedToPlayer(col.transform) then
-            valid = false
-        end
-    end)
-
-    pcall(function()
-        if valid and self.trans ~= nil and col.transform ~= nil and col.transform.IsChildOf ~= nil and col.transform:IsChildOf(self.trans) then
-            valid = false
-        end
-    end)
-
-    return valid
-end
-
-function spellFireBall:IsValidGroundHit(point, normal, col)
-    if point == nil then return false end
-    if point.y < self.groundRayMinValidY then return false end
-    if not self:IsValidGroundCollider(col) then return false end
-
-    -- Evita che una parete, un muro o un fianco di collider venga considerato terreno.
-    -- Un pavimento piano ha normal.y circa 1; una parete verticale ha normal.y circa 0.
-    if normal ~= nil then
-        if normal.y < self.groundMinNormalY then
-            return false
-        end
-    end
-
-    return true
-end
-
-function spellFireBall:GetHighestGroundPointAt(samplePos)
-    if samplePos == nil then return nil end
-
-    local origin = UE.Vector3(samplePos.x, samplePos.y + self.groundRayStartHeight, samplePos.z)
-    local dir = UE.Vector3.down
-    local bestPoint = nil
-    local bestY = self.groundRayMinValidY
-
-    local hits = nil
-
-    pcall(function()
-        hits = UE.Physics.RaycastAll(origin, dir, self.groundRayDistance)
-    end)
-
-    local count = self:GetRaycastArrayCount(hits)
-
-    for i = 0, count - 1 do
-        local hit = self:GetRaycastArrayItem(hits, i)
-        local point = self:GetRaycastHitPoint(hit)
-        local normal = self:GetRaycastHitNormal(hit)
-        local col = self:GetRaycastHitCollider(hit)
-
-        if self:IsValidGroundHit(point, normal, col) then
-            -- Per ogni singolo raggio prendiamo la superficie valida più alta.
-            -- Così non agganciamo pavimenti sotto la mappa o livelli inferiori attraversati dal raycast.
-            if point.y > bestY then
-                bestY = point.y
-                bestPoint = point
-            end
-        end
-    end
-
-    return bestPoint
-end
-
-function spellFireBall:GetGroundSampleOffsets()
-    local r = self.groundFootprintRadius
-    local d = r * 0.72
-
-    -- Campioniamo centro, assi e diagonali.
-    -- Il cubo è largo circa 3 unità, quindi un raggio 1.35 copre quasi tutta la base senza uscire troppo.
-    return {
-        UE.Vector3(0, 0, 0),
-        UE.Vector3(r, 0, 0),
-        UE.Vector3(-r, 0, 0),
-        UE.Vector3(0, 0, r),
-        UE.Vector3(0, 0, -r),
-        UE.Vector3(d, 0, d),
-        UE.Vector3(-d, 0, d),
-        UE.Vector3(d, 0, -d),
-        UE.Vector3(-d, 0, -d)
-    }
-end
-
-function spellFireBall:GetGroundedPosition(basePos, extraOffset)
-    if basePos == nil then return basePos end
-
-    if extraOffset == nil then
-        extraOffset = 0
-    end
-
-    local fallback = UE.Vector3(basePos.x, basePos.y + extraOffset, basePos.z)
-    local offsets = self:GetGroundSampleOffsets()
-    local chosenY = nil
-
-    for i = 1, #offsets do
-        local o = offsets[i]
-        local samplePos = UE.Vector3(basePos.x + o.x, basePos.y, basePos.z + o.z)
-        local p = self:GetHighestGroundPointAt(samplePos)
-
-        if p ~= nil then
-            -- Tra le superfici reali sotto l'impronta del Kurohitsugi scegliamo la più bassa.
-            -- Questo risolve le scale: il fondo del cubo parte dal gradino più basso coperto dalla base,
-            -- evitando il vuoto visibile sotto una parte della struttura.
-            -- Risolve anche il caso vicino ai muri: se il centro becca una parte alta del muro,
-            -- i raggi laterali trovano il pavimento e vincono perché sono più bassi.
-            if chosenY == nil or p.y < chosenY then
-                chosenY = p.y
-            end
-        end
-    end
-
-    if chosenY ~= nil then
-        return UE.Vector3(basePos.x, chosenY + extraOffset, basePos.z)
-    end
-
-    -- Fallback: se il raycast non trova nulla, non rompiamo la spell.
-    -- Manteniamo la posizione calcolata prima.
-    return fallback
-end
-
 function spellFireBall:InitTargetPosition()
     local flatDir = self:GetFlatAimDirection()
 
     self.startHandLocalPos = self:GetHandRelativePos()
     self.startTargetPos = self.trans.position + flatDir * self.targetDistance
-    self.startTargetPos = self:GetGroundedPosition(self.startTargetPos, self.targetHeightOffset)
+    self.startTargetPos.y = self.targetHeightOffset
     self.lastTargetPos = self.startTargetPos
 
     if self.targetAreaRoot ~= nil then
@@ -756,6 +546,8 @@ end
 function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:FindKurohitsugiObjects()
 
+    self:UpdateChargeReiatsuBind()
+
     if self.previewCube ~= nil then
         self.previewCube:Rotate(UE.Vector3(0.8, 1.4, 0.45) * UE.Time.deltaTime * self.rotationSpeed)
     end
@@ -766,7 +558,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
         local targetOffset = self:ClampFlatOffset(handDelta * self.targetMoveMultiplier)
 
         local pos = self.startTargetPos + targetOffset
-        pos = self:GetGroundedPosition(pos, self.targetHeightOffset)
+        pos.y = self.targetHeightOffset
 
         self.targetAreaRoot.position = pos
 
@@ -826,6 +618,10 @@ function spellFireBall:ResetSequenceFlags()
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+
+    self.chargeReiatsuActive = false
+    self.chargeReiatsuLastTick = 0
+
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
     self.kurohitsugiRainLastPulseTime = -999
@@ -944,6 +740,8 @@ function spellFireBall:HideKurohitsugiCastAll()
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+
+    self:StopChargeReiatsuBind()
 
     self.isSequenceRunning = false
     self.pendingCastBlocked = false
@@ -1396,6 +1194,174 @@ function spellFireBall:IsValidGravityTarget(pu)
 
     return valid
 end
+
+
+-- =========================================================
+-- KUROHITSUGI CHARGE REIATSU BIND
+-- =========================================================
+
+function spellFireBall:GetChargeReiatsuCenter()
+    local pt = self:GetPlayerTrans()
+
+    if pt ~= nil then
+        return pt.position + UE.Vector3(0, self.chargeReiatsuCenterHeight, 0)
+    end
+
+    return self.trans.position
+end
+
+function spellFireBall:StartChargeReiatsuBind()
+    if not self.chargeReiatsuEnabled then return end
+    if self.chargeReiatsuActive then return end
+
+    self.chargeReiatsuActive = true
+    self.chargeReiatsuLastTick = -999
+
+    self:ApplyChargeReiatsuTick()
+
+    print("KUROHITSUGI TEST - Charge Reiatsu bind started")
+end
+
+function spellFireBall:StopChargeReiatsuBind()
+    if not self.chargeReiatsuActive then return end
+
+    self.chargeReiatsuActive = false
+    self.chargeReiatsuLastTick = 0
+
+    print("KUROHITSUGI TEST - Charge Reiatsu bind stopped")
+end
+
+function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center)
+    if pu == nil then return end
+    if center == nil then return end
+    if not self:IsValidGravityTarget(pu) then return end
+
+    local puPos = self:GetPhysicsUnitPosition(pu)
+    if puPos == nil then return end
+
+    -- V1.5: Reiatsu attorno al player, senza pull verso il player.
+    -- Mantiene la pressione fisica della V1, ma meno violenta.
+    -- In più prova DoStiff come la Telekinesis, per dare l'effetto "imbambolato" senza creare joint AoE.
+    local force = UE.Vector3.down * self.chargeReiatsuDownForce
+
+    pcall(function()
+        if self.chargeReiatsuUseStiff and pu.unitType == CL.Tagger.Tag.InteractRole then
+            if pu.muscleState ~= nil then
+                pu.muscleState:DoStiff(self.chargeReiatsuStiffDuration)
+            end
+        end
+    end)
+
+    pcall(function()
+        pu:DisableGravityAWhile(self.chargeReiatsuGravityOffTime)
+    end)
+
+    pcall(function()
+        pu:SetKinematic(false)
+    end)
+
+    pcall(function()
+        pu:AddForce(force)
+    end)
+
+    local rb = self:GetPhysicsUnitRigidbody(pu)
+
+    pcall(function()
+        if rb ~= nil then
+            rb:AddForce(force)
+
+            local v = rb.velocity
+            if v ~= nil then
+                -- Damping morbido: rallenta il movimento senza congelare brutalmente il ragdoll.
+                rb.velocity = UE.Vector3(
+                    v.x * self.chargeReiatsuVelocityDamping,
+                    v.y * self.chargeReiatsuVelocityDamping,
+                    v.z * self.chargeReiatsuVelocityDamping
+                )
+            end
+
+            if rb.angularVelocity ~= nil then
+                rb.angularVelocity = rb.angularVelocity * self.chargeReiatsuAngularDamping
+            end
+        end
+    end)
+
+    if self.chargeReiatsuKnockout then
+        pcall(function()
+            if pu.motion ~= nil then
+                pu.motion:Knockout()
+            end
+        end)
+    end
+
+    -- Proviamo anche sul root, ma senza doppio AddForce aggressivo.
+    -- Serve per nemici grandi/complessi che espongono parti fisiche diverse.
+    pcall(function()
+        if pu.GetRootPu ~= nil then
+            local root = pu:GetRootPu()
+
+            if root ~= nil and root ~= pu and self:IsValidGravityTarget(root) then
+                root:DisableGravityAWhile(self.chargeReiatsuGravityOffTime)
+                root:SetKinematic(false)
+
+                local rootRb = self:GetPhysicsUnitRigidbody(root)
+
+                if rootRb ~= nil then
+                    local rv = rootRb.velocity
+                    if rv ~= nil then
+                        rootRb.velocity = UE.Vector3(
+                            rv.x * self.chargeReiatsuVelocityDamping,
+                            rv.y * self.chargeReiatsuVelocityDamping,
+                            rv.z * self.chargeReiatsuVelocityDamping
+                        )
+                    end
+
+                    if rootRb.angularVelocity ~= nil then
+                        rootRb.angularVelocity = rootRb.angularVelocity * self.chargeReiatsuAngularDamping
+                    end
+                end
+
+                if self.chargeReiatsuKnockout and root.motion ~= nil then
+                    root.motion:Knockout()
+                end
+            end
+        end
+    end)
+end
+
+function spellFireBall:ApplyChargeReiatsuTick()
+    if not self.chargeReiatsuEnabled then return end
+    if not self.chargeReiatsuActive then return end
+
+    local center = self:GetChargeReiatsuCenter()
+    local targets = nil
+
+    -- Importante: solo logic target.
+    -- Non usiamo QueryInRadiusTemp qui, così evitiamo di attirare archi/armi/oggetti secondari.
+    pcall(function()
+        targets = CL.PhysicsUnit.QueryLogicTargetInRadiusTemp(center, self.chargeReiatsuRadius)
+    end)
+
+    local count = self:GetListCount(targets)
+
+    for i = 0, count - 1 do
+        local pu = self:GetListItem(targets, i)
+        self:ApplyChargeReiatsuToPhysicsUnit(pu, center)
+    end
+end
+
+function spellFireBall:UpdateChargeReiatsuBind()
+    if not self.chargeReiatsuEnabled then return end
+    if not self.chargeReiatsuActive then return end
+
+    local now = UE.Time.time
+
+    if now - self.chargeReiatsuLastTick >= self.chargeReiatsuTickInterval then
+        self.chargeReiatsuLastTick = now
+        self:ApplyChargeReiatsuTick()
+    end
+end
+
 
 function spellFireBall:ApplyForceToPhysicsUnit(pu, force)
     if pu == nil then return end
@@ -2069,6 +2035,9 @@ function spellFireBall:ResetKurohitsugiCast()
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+
+    self:StopChargeReiatsuBind()
+
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
     self.kurohitsugiRainLastPulseTime = -999
@@ -2105,7 +2074,7 @@ function spellFireBall:CastKurohitsugiAtTarget()
     end
 
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
-    pos = self:GetGroundedPosition(pos, self.castHeightOffset)
+    pos.y = self.castHeightOffset
 
     self.castRoot:SetParent(nil, true)
 
@@ -2141,6 +2110,7 @@ function spellFireBall:OnChargeBegin()
     self:ShowKurohitsugiPreview()
     self:InitTargetPosition()
     self:StartKurohitsugiPreviewUpdate()
+    self:StartChargeReiatsuBind()
 end
 
 function spellFireBall:OnChargeRelease()
@@ -2148,6 +2118,8 @@ function spellFireBall:OnChargeRelease()
     pcall(function()
         self:SetHandPose(false)
     end)
+
+    self:StopChargeReiatsuBind()
 
     -- Se durante una sequenza attiva arriva un release, lo ignoriamo.
     -- Importante: non chiamiamo ResetKurohitsugiCast e non fermiamo la sequenza in corso.
@@ -2173,6 +2145,8 @@ function spellFireBall:OnChargeCancel()
     pcall(function()
         self:SetHandPose(false)
     end)
+
+    self:StopChargeReiatsuBind()
 
     if self.isSequenceRunning then
         return
