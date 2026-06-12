@@ -6,6 +6,7 @@ local spellFireBall = {
 
     palmPreviewRoot = nil,
     targetAreaRoot = nil,
+    reiatsuVisualRoot = nil,
     castRoot = nil,
     sequenceRoot = nil,
 
@@ -204,6 +205,44 @@ local function SetChildrenActive(root, active)
     end
 end
 
+local function PlayParticleSystemsInRoot(root)
+    if root == nil then return end
+
+    pcall(function()
+        local systems = root:GetComponentsInChildren(typeof(UE.ParticleSystem), true)
+
+        if systems ~= nil then
+            for i = 0, systems.Length - 1 do
+                local ps = systems[i]
+
+                if ps ~= nil then
+                    ps:Clear(true)
+                    ps:Play(true)
+                end
+            end
+        end
+    end)
+end
+
+local function StopParticleSystemsInRoot(root)
+    if root == nil then return end
+
+    pcall(function()
+        local systems = root:GetComponentsInChildren(typeof(UE.ParticleSystem), true)
+
+        if systems ~= nil then
+            for i = 0, systems.Length - 1 do
+                local ps = systems[i]
+
+                if ps ~= nil then
+                    ps:Stop(true)
+                    ps:Clear(true)
+                end
+            end
+        end
+    end)
+end
+
 local function Clamp01(v)
     if v < 0 then return 0 end
     if v > 1 then return 1 end
@@ -278,6 +317,10 @@ function spellFireBall:FindKurohitsugiObjects()
 
     if self.targetAreaRoot == nil then
         self.targetAreaRoot = self.trans:Find("TargetAreaRoot")
+    end
+
+    if self.reiatsuVisualRoot == nil then
+        self.reiatsuVisualRoot = self.trans:Find("ReiatsuVisualRoot")
     end
 
     if self.castRoot == nil then
@@ -508,6 +551,49 @@ function spellFireBall:GetHandRelativePos()
     return self.trans.position
 end
 
+function spellFireBall:UpdateReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    if self.reiatsuVisualRoot == nil then return end
+
+    local pt = self:GetPlayerTrans()
+
+    if pt ~= nil then
+        local pos = pt.position
+        pos.y = 0.05
+        self.reiatsuVisualRoot.position = pos
+        self.reiatsuVisualRoot.rotation = UE.Quaternion.identity
+    else
+        self.reiatsuVisualRoot.position = self.trans.position
+        self.reiatsuVisualRoot.rotation = UE.Quaternion.identity
+    end
+end
+
+function spellFireBall:ShowReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    if self.reiatsuVisualRoot == nil then
+        print("KUROHITSUGI WARNING - ReiatsuVisualRoot nil")
+        return
+    end
+
+    self:UpdateReiatsuVisual()
+
+    SetActive(self.reiatsuVisualRoot, true)
+    PlayParticleSystemsInRoot(self.reiatsuVisualRoot)
+
+    print("KUROHITSUGI TEST - Reiatsu visual shown")
+end
+
+function spellFireBall:HideReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    StopParticleSystemsInRoot(self.reiatsuVisualRoot)
+    SetActive(self.reiatsuVisualRoot, false)
+
+    print("KUROHITSUGI TEST - Reiatsu visual hidden")
+end
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     SetActive(self.palmPreviewRoot, true)
@@ -554,6 +640,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:FindKurohitsugiObjects()
 
     self:UpdateChargeReiatsuBind()
+    self:UpdateReiatsuVisual()
 
     if self.previewCube ~= nil then
         self.previewCube:Rotate(UE.Vector3(0.8, 1.4, 0.45) * UE.Time.deltaTime * self.rotationSpeed)
@@ -604,6 +691,7 @@ function spellFireBall:HideKurohitsugiPreviewAll()
 
     SetActive(self.palmPreviewRoot, false)
     SetActive(self.targetAreaRoot, false)
+    self:HideReiatsuVisual()
 end
 
 function spellFireBall:StopKurohitsugiSequence()
@@ -2138,6 +2226,7 @@ function spellFireBall:OnChargeBegin()
 
     self:ShowKurohitsugiPreview()
     self:InitTargetPosition()
+    self:ShowReiatsuVisual()
     self:StartKurohitsugiPreviewUpdate()
     self:StartChargeReiatsuBind()
 end
@@ -2149,6 +2238,7 @@ function spellFireBall:OnChargeRelease()
     end)
 
     self:StopChargeReiatsuBind()
+    self:HideReiatsuVisual()
 
     -- Se durante una sequenza attiva arriva un release, lo ignoriamo.
     -- Importante: non chiamiamo ResetKurohitsugiCast e non fermiamo la sequenza in corso.
@@ -2176,6 +2266,7 @@ function spellFireBall:OnChargeCancel()
     end)
 
     self:StopChargeReiatsuBind()
+    self:HideReiatsuVisual()
 
     if self.isSequenceRunning then
         return
