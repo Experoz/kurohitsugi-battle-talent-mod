@@ -150,10 +150,17 @@ local spellFireBall = {
     chargeReiatsuDownForce = 10,
     chargeReiatsuVelocityDamping = 0.22,
     chargeReiatsuGravityOffTime = 0.10,
-    chargeReiatsuKnockout = false,
+    chargeReiatsuKnockout = true,
     chargeReiatsuAngularDamping = 0.35,
     chargeReiatsuUseStiff = true,
-    chargeReiatsuStiffDuration = 0.75,
+    chargeReiatsuStiffDuration = 1.20,
+
+    -- V2.1: interrupt stile Telecinesi, ma SOLO sui logic target.
+    -- Non usa Character Sweep e non prosegue dopo il release, così non dovrebbe rompere il cast.
+    chargeReiatsuKnockoutInterval = 0.30,
+    chargeReiatsuLastKnockoutTime = -999,
+    chargeReiatsuUseDoThrowing = true,
+    chargeReiatsuUseRootInterrupt = true,
 
     startedEffects = false,
     startedSpikes = false,
@@ -621,6 +628,7 @@ function spellFireBall:ResetSequenceFlags()
 
     self.chargeReiatsuActive = false
     self.chargeReiatsuLastTick = 0
+    self.chargeReiatsuLastKnockoutTime = -999
 
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
@@ -1227,11 +1235,12 @@ function spellFireBall:StopChargeReiatsuBind()
 
     self.chargeReiatsuActive = false
     self.chargeReiatsuLastTick = 0
+    self.chargeReiatsuLastKnockoutTime = -999
 
     print("KUROHITSUGI TEST - Charge Reiatsu bind stopped")
 end
 
-function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center)
+function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
     if pu == nil then return end
     if center == nil then return end
     if not self:IsValidGravityTarget(pu) then return end
@@ -1286,10 +1295,16 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center)
         end
     end)
 
-    if self.chargeReiatsuKnockout then
+    if self.chargeReiatsuKnockout and doInterrupt then
         pcall(function()
             if pu.motion ~= nil then
                 pu.motion:Knockout()
+            end
+        end)
+
+        pcall(function()
+            if self.chargeReiatsuUseDoThrowing and pu.muscleState ~= nil then
+                pu.muscleState:DoThrowing()
             end
         end)
     end
@@ -1321,8 +1336,14 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center)
                     end
                 end
 
-                if self.chargeReiatsuKnockout and root.motion ~= nil then
-                    root.motion:Knockout()
+                if self.chargeReiatsuUseRootInterrupt and self.chargeReiatsuKnockout and doInterrupt then
+                    if root.motion ~= nil then
+                        root.motion:Knockout()
+                    end
+
+                    if self.chargeReiatsuUseDoThrowing and root.muscleState ~= nil then
+                        root.muscleState:DoThrowing()
+                    end
                 end
             end
         end
@@ -1344,9 +1365,17 @@ function spellFireBall:ApplyChargeReiatsuTick()
 
     local count = self:GetListCount(targets)
 
+    local doInterrupt = false
+    local now = UE.Time.time
+
+    if now - self.chargeReiatsuLastKnockoutTime >= self.chargeReiatsuKnockoutInterval then
+        self.chargeReiatsuLastKnockoutTime = now
+        doInterrupt = true
+    end
+
     for i = 0, count - 1 do
         local pu = self:GetListItem(targets, i)
-        self:ApplyChargeReiatsuToPhysicsUnit(pu, center)
+        self:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
     end
 end
 
