@@ -16,6 +16,7 @@ local spellFireBall = {
     spikesRoot = nil,
     effectsRoot = nil,
     breakPiecesRoot = nil,
+    innerDarknessRoot = nil,
 
     previewCube = nil,
     targetArea = nil,
@@ -49,15 +50,19 @@ local spellFireBall = {
     -- Timing stile sequenza Unity/Inspector
     delayBeforeStart = 0.10,
 
-    verticalLinesDuration = 0.80,
-    topLinesDuration = 0.50,
-    linesDelay = 0.25,
+    verticalLinesDuration = 0.30,
+    topLinesDuration = 0.150,
+    linesDelay = 0.15,
 
-    wallsGrowDuration = 0.50,
+    wallsGrowDuration = 0.90,
     wallsDelay = 0.35,
 
-    topGrowDuration = 0.30,
+    topGrowDuration = 0.75,
     topDelay = 0.25,
+
+    -- Oscurità interna: volume nero pieno dentro la bara.
+    -- Solo visuale: niente collider/danno. Si accende appena il top ha finito di chiudersi.
+    innerDarknessStartAfterTopComplete = 0.15,
 
     effectsDelay = 0.25,
 
@@ -76,15 +81,21 @@ local spellFireBall = {
     gravityZoneEndTime = 0,
     gravityZoneDuration = 1.00,
     gravityZoneRadius = 4.0,
-    gravityZoneCenterHeight = 2.35,
+    gravityZoneCenterHeight = 1.00,
     gravityZoneTickInterval = 0.03,
     gravityZoneLastTick = 0,
 
     -- V7: riprendiamo la potenza della V3, che era quella che dava gravità e danni.
     -- La differenza è che il push finale non usa più direzioni/velocity aggressive su tutto il ragdoll.
-    gravityPullForce = 80,
-    gravityLiftForce = 8,
+    gravityPullForce = 55,
+    gravityLiftForce = 0,
     gravityDownForce = 0,
+
+    -- Rampa iniziale della gravità:
+    -- parte morbida quando iniziano le pareti e arriva alla forza massima circa a metà crescita pareti.
+    gravityUseRamp = false,
+    gravityRampStartMultiplier = 0.10,
+    gravityRampMaxAtWallsProgress = 0.50,
     gravityOffTime = 2.20,
     gravityKnockout = true,
 
@@ -99,12 +110,12 @@ local spellFireBall = {
     gravityFinalSlamDone = false,
     gravityFinalVelocityClampY = -6.0,
 
-	gravityStartExtraDelay = 2.00,
+    gravityStartAfterWallsStart = 0.35,
 	gravityEndBeforeBreak = 0.16,
     -- Tenuto acceso perché nella V3 era ciò che faceva davvero funzionare risucchio e danni.
     -- Viene usato durante l'attrazione, ma NON per il push finale.
     gravityAffectObjects = true,
-    gravityVelocityAssist = 0.15,
+    gravityVelocityAssist = 0,
 
     -- Danno interno stile slash/hitscan: parte con le spike.
     -- Non sostituisce la gravità: aggiunge colpi affidabili contro nemici grossi o singoli.
@@ -167,6 +178,7 @@ local spellFireBall = {
     startedSpikes = false,
     retractedSpikes = false,
     startedBreakPieces = false,
+    startedInnerDarkness = false,
 
     linesStartTime = 0,
     topLinesStartTime = 0,
@@ -183,6 +195,21 @@ local spellFireBall = {
     topData = nil,
     spikeData = nil,
     breakPieceData = nil,
+
+    -- Kurohitsugi wall dissolve material control.
+    -- Lo shader usa _DissolveAmount: valori bassi = pareti nascoste, valori alti = pareti visibili.
+    -- Usiamo un range leggermente esteso perché la noise geometrica può lasciare frammenti visibili anche a 0.
+    wallDissolveRenderers = nil,
+    wallDissolveProperty = "_DissolveAmount",
+    wallDissolveHiddenAmount = -0.25,
+    wallDissolveVisibleAmount = 1.20,
+    wallDissolveExtraDuration = 1.80,
+
+    -- Preparazione futura: il top avrà un dissolve dedicato radiale/quadrato, separato dalle pareti.
+    topDissolveRenderers = nil,
+    topDissolveProperty = "_DissolveAmount",
+    topDissolveHiddenAmount = -0.25,
+    topDissolveVisibleAmount = 1.20,
 
     -- Evita che dal secondo cast vengano salvate scale già modificate
     visualDataCached = false,
@@ -239,6 +266,26 @@ local function StopParticleSystemsInRoot(root)
                     ps:Clear(true)
                 end
             end
+        end
+    end)
+end
+
+local function SafeSetRendererMaterialFloat(renderer, propertyName, value)
+    if renderer == nil then return end
+    if propertyName == nil then return end
+
+    -- Prima proviamo material: in Unity crea/usa l'istanza runtime del materiale del renderer.
+    -- Così evitiamo di modificare direttamente l'asset materiale condiviso.
+    pcall(function()
+        if renderer.material ~= nil then
+            renderer.material:SetFloat(propertyName, value)
+        end
+    end)
+
+    -- Fallback su sharedMaterial: utile se, in BT/Lua, renderer.material non viene esposto.
+    pcall(function()
+        if renderer.sharedMaterial ~= nil then
+            renderer.sharedMaterial:SetFloat(propertyName, value)
         end
     end)
 end
@@ -357,6 +404,10 @@ function spellFireBall:FindKurohitsugiObjects()
 
     if self.breakPiecesRoot == nil and self.sequenceRoot ~= nil then
         self.breakPiecesRoot = self.sequenceRoot:Find("BreakPiecesRoot")
+    end
+
+    if self.innerDarknessRoot == nil and self.sequenceRoot ~= nil then
+        self.innerDarknessRoot = self.sequenceRoot:Find("InnerDarknessRoot")
     end
 
     if self.previewCube == nil and self.palmPreviewRoot ~= nil then
@@ -528,6 +579,72 @@ function spellFireBall:CacheVisualData()
     end
 
     self.visualDataCached = true
+end
+
+function spellFireBall:CacheWallDissolveRenderers()
+    self.wallDissolveRenderers = {}
+
+    if self.wallsRoot == nil then return end
+
+    pcall(function()
+        local renderers = self.wallsRoot:GetComponentsInChildren(typeof(UE.Renderer), true)
+
+        if renderers ~= nil then
+            for i = 0, renderers.Length - 1 do
+                local r = renderers[i]
+                if r ~= nil then
+                    table.insert(self.wallDissolveRenderers, r)
+                end
+            end
+        end
+    end)
+end
+
+function spellFireBall:SetWallDissolveAmount(amount)
+    if amount == nil then return end
+
+    if self.wallDissolveRenderers == nil or #self.wallDissolveRenderers == 0 then
+        self:CacheWallDissolveRenderers()
+    end
+
+    if self.wallDissolveRenderers == nil then return end
+
+    for i = 1, #self.wallDissolveRenderers do
+        SafeSetRendererMaterialFloat(self.wallDissolveRenderers[i], self.wallDissolveProperty, amount)
+    end
+end
+
+function spellFireBall:CacheTopDissolveRenderers()
+    self.topDissolveRenderers = {}
+
+    if self.topRoot == nil then return end
+
+    pcall(function()
+        local renderers = self.topRoot:GetComponentsInChildren(typeof(UE.Renderer), true)
+
+        if renderers ~= nil then
+            for i = 0, renderers.Length - 1 do
+                local r = renderers[i]
+                if r ~= nil then
+                    table.insert(self.topDissolveRenderers, r)
+                end
+            end
+        end
+    end)
+end
+
+function spellFireBall:SetTopDissolveAmount(amount)
+    if amount == nil then return end
+
+    if self.topDissolveRenderers == nil or #self.topDissolveRenderers == 0 then
+        self:CacheTopDissolveRenderers()
+    end
+
+    if self.topDissolveRenderers == nil then return end
+
+    for i = 1, #self.topDissolveRenderers do
+        SafeSetRendererMaterialFloat(self.topDissolveRenderers[i], self.topDissolveProperty, amount)
+    end
 end
 
 function spellFireBall:GetPlayerTrans()
@@ -707,6 +824,7 @@ function spellFireBall:ResetSequenceFlags()
     self.startedSpikes = false
     self.retractedSpikes = false
     self.startedBreakPieces = false
+    self.startedInnerDarkness = false
 
     self.gravityZoneStarted = false
     self.gravityZoneEndTime = 0
@@ -728,6 +846,12 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     self:FindKurohitsugiObjects()
     self:CalculateSequenceTimes()
     self:CacheVisualData()
+    self:CacheWallDissolveRenderers()
+    self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
+
+    -- Preparazione futura per il top dissolve radiale: per ora non cambia il comportamento se il top non usa quello shader.
+    self:CacheTopDissolveRenderers()
+    self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
 
     SetActive(self.linesRoot, true)
     SetActive(self.wallsRoot, true)
@@ -735,6 +859,7 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
 
     SetActive(self.effectsRoot, false)
     SetActive(self.breakPiecesRoot, false)
+    SetActive(self.innerDarknessRoot, false)
 
     if self.spikesRoot ~= nil then
         self.spikesRoot.gameObject:SetActive(true)
@@ -818,11 +943,15 @@ function spellFireBall:HideKurohitsugiCastAll()
     SetActive(self.topRoot, false)
     SetActive(self.effectsRoot, false)
     SetActive(self.breakPiecesRoot, false)
+    SetActive(self.innerDarknessRoot, false)
 
     if self.spikesRoot ~= nil then
         SetChildrenActive(self.spikesRoot, false)
         self.spikesRoot.gameObject:SetActive(false)
     end
+
+    self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
+    self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
 
     if self.castRoot ~= nil then
         self.castRoot.gameObject:SetActive(false)
@@ -868,13 +997,22 @@ end
 function spellFireBall:AnimateWalls()
     if self.wallData == nil then return end
 
-    local t = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / self.wallsGrowDuration)
+    -- Crescita fisica delle pareti.
+    local wallT = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / self.wallsGrowDuration)
+
+    -- Dissolve leggermente più lento della crescita fisica:
+    -- le pareti arrivano su, ma la superficie continua a "materializzarsi" per qualche istante.
+    local dissolveDuration = self.wallsGrowDuration + self.wallDissolveExtraDuration
+    local dissolveT = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / dissolveDuration)
+
+    local dissolveAmount = Lerp(self.wallDissolveHiddenAmount, self.wallDissolveVisibleAmount, dissolveT)
+    self:SetWallDissolveAmount(dissolveAmount)
 
     for i = 1, #self.wallData do
         local d = self.wallData[i]
         local tr = d.trans
 
-        local h = Lerp(0.01, d.scale.y, t)
+        local h = Lerp(0.01, d.scale.y, wallT)
         tr.localScale = UE.Vector3(d.scale.x, h, d.scale.z)
         tr.localPosition = UE.Vector3(d.pos.x, h * 0.5, d.pos.z)
     end
@@ -884,6 +1022,11 @@ function spellFireBall:AnimateTop()
     if self.topData == nil then return end
 
     local t = EaseOutCubic((self.sequenceTimer - self.topStartTime) / self.topGrowDuration)
+
+    -- Preparazione futura: se assegneremo al top un materiale con _DissolveAmount,
+    -- verrà animato automaticamente insieme alla chiusura del pannello.
+    local dissolveAmount = Lerp(self.topDissolveHiddenAmount, self.topDissolveVisibleAmount, t)
+    self:SetTopDissolveAmount(dissolveAmount)
 
     for i = 1, #self.topData do
         local d = self.topData[i]
@@ -1480,6 +1623,30 @@ function spellFireBall:UpdateChargeReiatsuBind()
 end
 
 
+function spellFireBall:GetGravityRampMultiplier()
+    if not self.gravityUseRamp then return 1.0 end
+    if self.wallsGrowDuration == nil or self.wallsGrowDuration <= 0 then return 1.0 end
+
+    -- Progressione delle pareti da 0 a 1.
+    local wallProgress = (self.sequenceTimer - self.wallsStartTime) / self.wallsGrowDuration
+
+    -- Vogliamo arrivare al massimo quando le pareti sono circa a metà.
+    local maxAt = self.gravityRampMaxAtWallsProgress
+    if maxAt == nil or maxAt <= 0.01 then
+        maxAt = 0.50
+    end
+
+    local t = Clamp01(wallProgress / maxAt)
+    t = EaseOutCubic(t)
+
+    local startMul = self.gravityRampStartMultiplier
+    if startMul == nil then
+        startMul = 0.20
+    end
+
+    return Lerp(startMul, 1.0, t)
+end
+
 function spellFireBall:ApplyForceToPhysicsUnit(pu, force)
     if pu == nil then return end
     if force == nil then return end
@@ -1523,7 +1690,10 @@ function spellFireBall:ApplyGravityToPhysicsUnit(pu, center)
         pullDir = toCenter.normalized
     end
 
-    local force = pullDir * self.gravityPullForce + UE.Vector3.up * self.gravityLiftForce + UE.Vector3.down * self.gravityDownForce
+    local rampMul = self:GetGravityRampMultiplier()
+    local force = pullDir * (self.gravityPullForce * rampMul)
+        + UE.Vector3.up * (self.gravityLiftForce * rampMul)
+        + UE.Vector3.down * (self.gravityDownForce * rampMul)
 
     -- Comportamento stile Black Hole: gravità spenta abbastanza a lungo e knockout.
     pcall(function()
@@ -1880,8 +2050,17 @@ function spellFireBall:ApplyGravityZoneTick()
 end
 
 function spellFireBall:GetGravityStartTime()
-    -- Parte dopo le linee alte + delay extra: così i muri hanno tempo di alzarsi prima del risucchio visibile.
-    return self.topLinesStartTime + self.topLinesDuration + self.gravityStartExtraDelay
+    -- Parte con un piccolo delay dopo l'inizio delle pareti.
+    -- Così la gravità entra quando il Kurohitsugi sta iniziando a chiudersi,
+    -- senza aspettare le spike e senza partire troppo presto sulle sole linee.
+    return self.wallsStartTime + self.gravityStartAfterWallsStart
+end
+
+
+function spellFireBall:GetInnerDarknessStartTime()
+    -- L'oscurità interna deve comparire solo dopo che il top ha finito di chiudersi.
+    -- Usiamo anche topDelay per evitare che appaia durante l'animazione visibile del top.
+    return self.topStartTime + self.topGrowDuration + self.topDelay + self.innerDarknessStartAfterTopComplete
 end
 
 function spellFireBall:StartKurohitsugiGravityZone()
@@ -2037,6 +2216,11 @@ function spellFireBall:UpdateKurohitsugiSequence()
         self:AnimateWalls()
     end
 
+    if self.sequenceTimer >= self:GetInnerDarknessStartTime() and not self.startedInnerDarkness then
+        self.startedInnerDarkness = true
+        SetActive(self.innerDarknessRoot, true)
+    end
+
     if self.sequenceTimer >= self.topStartTime then
         self:AnimateTop()
     end
@@ -2100,6 +2284,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
             SetActive(self.linesRoot, false)
             SetActive(self.wallsRoot, false)
             SetActive(self.topRoot, false)
+            SetActive(self.innerDarknessRoot, false)
 
             if self.spikesRoot ~= nil then
                 SetChildrenActive(self.spikesRoot, false)
