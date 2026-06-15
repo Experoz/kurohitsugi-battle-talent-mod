@@ -25,13 +25,18 @@ local spellFireBall = {
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
 
-    -- Raycast multi-punto per appoggiare preview e cast alla Y più bassa sotto la base.
-    -- Serve soprattutto su scale/dislivelli: il Kurohitsugi usa la quota più bassa trovata
-    -- sotto centro, lati, angoli e punti interni della sua base.
-    groundRayStartHeight = 6.0,
-    groundRayDistance = 14.0,
-    groundSampleRadius = 1.45,
-    groundSampleInnerRadius = 0.75,
+    -- Ground detection: appoggia target circle e castRoot al terreno reale.
+    -- Serve soprattutto su scale, rampe e dislivelli, dove una Y fissa fa restare il Kurohitsugi sospeso o sotto terra.
+    groundRayStartHeight = 8.0,
+    groundRayDistance = 24.0,
+    groundRayMinValidY = -20.0,
+
+    -- Ground fix V2:
+    -- 1) evita muri/pareti filtrando la normale del raycast;
+    -- 2) campiona più punti sotto l'area del cubo;
+    -- 3) usa il punto più basso tra le superfici valide, così sulle scale il fondo non resta aperto.
+    groundMinNormalY = 0.55,
+    groundFootprintRadius = 1.35,
 
     rotationSpeed = 130,
     targetMoveMultiplier = 34.0,
@@ -786,88 +791,221 @@ function spellFireBall:ClampFlatOffset(offset)
     return flat
 end
 
-function spellFireBall:TryGetGroundYAtXZ(x, z)
-    local rayStart = UE.Vector3(x, self.trans.position.y + self.groundRayStartHeight, z)
-    local rayDir = UE.Vector3.down
-    local rayDistance = self.groundRayDistance
+function spellFireBall:GetRaycastArrayCount(hits)
+    if hits == nil then return 0 end
 
-    local groundY = nil
+    local count = 0
 
-    -- Versione più comune in bridge Lua/Unity: Raycast(origin, direction, distance) -> bool, hitInfo.
     pcall(function()
-        local hitOk, hitInfo = UE.Physics.Raycast(rayStart, rayDir, rayDistance)
+        count = hits.Length
+    end)
 
-        if hitOk and hitInfo ~= nil and hitInfo.point ~= nil then
-            groundY = hitInfo.point.y
+    pcall(function()
+        if (count == nil or count == 0) and hits.Count ~= nil then
+            count = hits.Count
         end
     end)
 
-    -- Fallback per bridge che restituiscono direttamente un hit object.
-    pcall(function()
-        if groundY == nil then
-            local hitInfo = UE.Physics.Raycast(rayStart, rayDir, rayDistance)
+    if count == nil then
+        count = 0
+    end
 
-            if hitInfo ~= nil and hitInfo.point ~= nil then
-                groundY = hitInfo.point.y
-            end
-        end
-    end)
-
-    return groundY
+    return count
 end
 
-function spellFireBall:ProjectKurohitsugiBaseToLowestGround(pos)
-    if pos == nil then return pos end
+function spellFireBall:GetRaycastArrayItem(hits, index)
+    if hits == nil then return nil end
 
-    local result = UE.Vector3(pos.x, pos.y, pos.z)
+    local item = nil
 
-    local r = self.groundSampleRadius
-    local ir = self.groundSampleInnerRadius
+    pcall(function()
+        item = hits[index]
+    end)
 
-    local samples = {
+    pcall(function()
+        if item == nil and hits.get_Item ~= nil then
+            item = hits:get_Item(index)
+        end
+    end)
+
+    return item
+end
+
+function spellFireBall:GetRaycastHitPoint(hit)
+    if hit == nil then return nil end
+
+    local point = nil
+
+    pcall(function()
+        point = hit.point
+    end)
+
+    return point
+end
+
+function spellFireBall:GetRaycastHitCollider(hit)
+    if hit == nil then return nil end
+
+    local col = nil
+
+    pcall(function()
+        col = hit.collider
+    end)
+
+    return col
+end
+
+function spellFireBall:GetRaycastHitNormal(hit)
+    if hit == nil then return nil end
+
+    local normal = nil
+
+    pcall(function()
+        normal = hit.normal
+    end)
+
+    return normal
+end
+
+function spellFireBall:IsValidGroundCollider(col)
+    if col == nil then return false end
+
+    local valid = true
+
+    -- Non appoggiamo mai il target su trigger/zone invisibili.
+    pcall(function()
+        if col.isTrigger then
+            valid = false
+        end
+    end)
+
+    -- Evita di colpire parti della gemma, preview, Kurohitsugi stesso, mani/player o oggetti tenuti.
+    pcall(function()
+        if valid and self:NameLooksLikePlayerOrHeldObject(col) then
+            valid = false
+        end
+    end)
+
+    pcall(function()
+        if valid and col.transform ~= nil and self:IsTransformLinkedToPlayer(col.transform) then
+            valid = false
+        end
+    end)
+
+    pcall(function()
+        if valid and self.trans ~= nil and col.transform ~= nil and col.transform.IsChildOf ~= nil and col.transform:IsChildOf(self.trans) then
+            valid = false
+        end
+    end)
+
+    return valid
+end
+
+function spellFireBall:IsValidGroundHit(point, normal, col)
+    if point == nil then return false end
+    if point.y < self.groundRayMinValidY then return false end
+    if not self:IsValidGroundCollider(col) then return false end
+
+    -- Evita che una parete, un muro o un fianco di collider venga considerato terreno.
+    -- Un pavimento piano ha normal.y circa 1; una parete verticale ha normal.y circa 0.
+    if normal ~= nil then
+        if normal.y < self.groundMinNormalY then
+            return false
+        end
+    end
+
+    return true
+end
+
+function spellFireBall:GetHighestGroundPointAt(samplePos)
+    if samplePos == nil then return nil end
+
+    local origin = UE.Vector3(samplePos.x, samplePos.y + self.groundRayStartHeight, samplePos.z)
+    local dir = UE.Vector3.down
+    local bestPoint = nil
+    local bestY = self.groundRayMinValidY
+
+    local hits = nil
+
+    pcall(function()
+        hits = UE.Physics.RaycastAll(origin, dir, self.groundRayDistance)
+    end)
+
+    local count = self:GetRaycastArrayCount(hits)
+
+    for i = 0, count - 1 do
+        local hit = self:GetRaycastArrayItem(hits, i)
+        local point = self:GetRaycastHitPoint(hit)
+        local normal = self:GetRaycastHitNormal(hit)
+        local col = self:GetRaycastHitCollider(hit)
+
+        if self:IsValidGroundHit(point, normal, col) then
+            -- Per ogni singolo raggio prendiamo la superficie valida più alta.
+            -- Così non agganciamo pavimenti sotto la mappa o livelli inferiori attraversati dal raycast.
+            if point.y > bestY then
+                bestY = point.y
+                bestPoint = point
+            end
+        end
+    end
+
+    return bestPoint
+end
+
+function spellFireBall:GetGroundSampleOffsets()
+    local r = self.groundFootprintRadius
+    local d = r * 0.72
+
+    -- Campioniamo centro, assi e diagonali.
+    -- Il cubo è largo circa 3 unità, quindi un raggio 1.35 copre quasi tutta la base senza uscire troppo.
+    return {
         UE.Vector3(0, 0, 0),
-
         UE.Vector3(r, 0, 0),
         UE.Vector3(-r, 0, 0),
         UE.Vector3(0, 0, r),
         UE.Vector3(0, 0, -r),
-
-        UE.Vector3(r, 0, r),
-        UE.Vector3(r, 0, -r),
-        UE.Vector3(-r, 0, r),
-        UE.Vector3(-r, 0, -r),
-
-        UE.Vector3(ir, 0, ir),
-        UE.Vector3(ir, 0, -ir),
-        UE.Vector3(-ir, 0, ir),
-        UE.Vector3(-ir, 0, -ir),
+        UE.Vector3(d, 0, d),
+        UE.Vector3(-d, 0, d),
+        UE.Vector3(d, 0, -d),
+        UE.Vector3(-d, 0, -d)
     }
+end
 
-    local foundGround = false
-    local lowestY = 0
+function spellFireBall:GetGroundedPosition(basePos, extraOffset)
+    if basePos == nil then return basePos end
 
-    for i = 1, #samples do
-        local s = samples[i]
-        local y = self:TryGetGroundYAtXZ(pos.x + s.x, pos.z + s.z)
+    if extraOffset == nil then
+        extraOffset = 0
+    end
 
-        if y ~= nil then
-            if not foundGround then
-                lowestY = y
-                foundGround = true
-            elseif y < lowestY then
-                lowestY = y
+    local fallback = UE.Vector3(basePos.x, basePos.y + extraOffset, basePos.z)
+    local offsets = self:GetGroundSampleOffsets()
+    local chosenY = nil
+
+    for i = 1, #offsets do
+        local o = offsets[i]
+        local samplePos = UE.Vector3(basePos.x + o.x, basePos.y, basePos.z + o.z)
+        local p = self:GetHighestGroundPointAt(samplePos)
+
+        if p ~= nil then
+            -- Tra le superfici reali sotto l'impronta del Kurohitsugi scegliamo la più bassa.
+            -- Questo risolve le scale: il fondo del cubo parte dal gradino più basso coperto dalla base,
+            -- evitando il vuoto visibile sotto una parte della struttura.
+            -- Risolve anche il caso vicino ai muri: se il centro becca una parte alta del muro,
+            -- i raggi laterali trovano il pavimento e vincono perché sono più bassi.
+            if chosenY == nil or p.y < chosenY then
+                chosenY = p.y
             end
         end
     end
 
-    if foundGround then
-        result.y = lowestY + self.targetHeightOffset
-    else
-        -- Fallback conservativo: se il raycast non risponde in BT/Lua, manteniamo il vecchio comportamento.
-        result.y = self.targetHeightOffset
+    if chosenY ~= nil then
+        return UE.Vector3(basePos.x, chosenY + extraOffset, basePos.z)
     end
 
-    return result
+    -- Fallback: se il raycast non trova nulla, non rompiamo la spell.
+    -- Manteniamo la posizione calcolata prima.
+    return fallback
 end
 
 function spellFireBall:InitTargetPosition()
@@ -875,7 +1013,7 @@ function spellFireBall:InitTargetPosition()
 
     self.startHandLocalPos = self:GetHandRelativePos()
     self.startTargetPos = self.trans.position + flatDir * self.targetDistance
-    self.startTargetPos = self:ProjectKurohitsugiBaseToLowestGround(self.startTargetPos)
+    self.startTargetPos = self:GetGroundedPosition(self.startTargetPos, self.targetHeightOffset)
     self.lastTargetPos = self.startTargetPos
 
     if self.targetAreaRoot ~= nil then
@@ -902,7 +1040,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
         local targetOffset = self:ClampFlatOffset(handDelta * self.targetMoveMultiplier)
 
         local pos = self.startTargetPos + targetOffset
-        pos = self:ProjectKurohitsugiBaseToLowestGround(pos)
+        pos = self:GetGroundedPosition(pos, self.targetHeightOffset)
 
         self.targetAreaRoot.position = pos
 
@@ -2523,8 +2661,7 @@ function spellFireBall:CastKurohitsugiAtTarget()
     end
 
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
-    pos = self:ProjectKurohitsugiBaseToLowestGround(pos)
-    pos.y = pos.y + self.castHeightOffset
+    pos = self:GetGroundedPosition(pos, self.castHeightOffset)
 
     self.castRoot:SetParent(nil, true)
 
