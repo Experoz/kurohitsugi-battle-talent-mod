@@ -25,6 +25,14 @@ local spellFireBall = {
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
 
+    -- Raycast multi-punto per appoggiare preview e cast alla Y più bassa sotto la base.
+    -- Serve soprattutto su scale/dislivelli: il Kurohitsugi usa la quota più bassa trovata
+    -- sotto centro, lati, angoli e punti interni della sua base.
+    groundRayStartHeight = 6.0,
+    groundRayDistance = 14.0,
+    groundSampleRadius = 1.45,
+    groundSampleInnerRadius = 0.75,
+
     rotationSpeed = 130,
     targetMoveMultiplier = 34.0,
     maxTargetMove = 9.0,
@@ -195,6 +203,14 @@ local spellFireBall = {
     topData = nil,
     spikeData = nil,
     breakPieceData = nil,
+
+    -- Kurohitsugi line dissolve material control.
+    -- Stessa logica delle pareti, ma con range leggermente più contenuto:
+    -- le linee sono sottili e devono sembrare "disegnate" dal reiatsu, non bucarsi troppo.
+    lineDissolveRenderers = nil,
+    lineDissolveProperty = "_DissolveAmount",
+    lineDissolveHiddenAmount = -0.20,
+    lineDissolveVisibleAmount = 1.10,
 
     -- Kurohitsugi wall dissolve material control.
     -- Lo shader usa _DissolveAmount: valori bassi = pareti nascoste, valori alti = pareti visibili.
@@ -581,6 +597,39 @@ function spellFireBall:CacheVisualData()
     self.visualDataCached = true
 end
 
+function spellFireBall:CacheLineDissolveRenderers()
+    self.lineDissolveRenderers = {}
+
+    if self.linesRoot == nil then return end
+
+    pcall(function()
+        local renderers = self.linesRoot:GetComponentsInChildren(typeof(UE.Renderer), true)
+
+        if renderers ~= nil then
+            for i = 0, renderers.Length - 1 do
+                local r = renderers[i]
+                if r ~= nil then
+                    table.insert(self.lineDissolveRenderers, r)
+                end
+            end
+        end
+    end)
+end
+
+function spellFireBall:SetLineDissolveAmount(amount)
+    if amount == nil then return end
+
+    if self.lineDissolveRenderers == nil or #self.lineDissolveRenderers == 0 then
+        self:CacheLineDissolveRenderers()
+    end
+
+    if self.lineDissolveRenderers == nil then return end
+
+    for i = 1, #self.lineDissolveRenderers do
+        SafeSetRendererMaterialFloat(self.lineDissolveRenderers[i], self.lineDissolveProperty, amount)
+    end
+end
+
 function spellFireBall:CacheWallDissolveRenderers()
     self.wallDissolveRenderers = {}
 
@@ -737,12 +786,96 @@ function spellFireBall:ClampFlatOffset(offset)
     return flat
 end
 
+function spellFireBall:TryGetGroundYAtXZ(x, z)
+    local rayStart = UE.Vector3(x, self.trans.position.y + self.groundRayStartHeight, z)
+    local rayDir = UE.Vector3.down
+    local rayDistance = self.groundRayDistance
+
+    local groundY = nil
+
+    -- Versione più comune in bridge Lua/Unity: Raycast(origin, direction, distance) -> bool, hitInfo.
+    pcall(function()
+        local hitOk, hitInfo = UE.Physics.Raycast(rayStart, rayDir, rayDistance)
+
+        if hitOk and hitInfo ~= nil and hitInfo.point ~= nil then
+            groundY = hitInfo.point.y
+        end
+    end)
+
+    -- Fallback per bridge che restituiscono direttamente un hit object.
+    pcall(function()
+        if groundY == nil then
+            local hitInfo = UE.Physics.Raycast(rayStart, rayDir, rayDistance)
+
+            if hitInfo ~= nil and hitInfo.point ~= nil then
+                groundY = hitInfo.point.y
+            end
+        end
+    end)
+
+    return groundY
+end
+
+function spellFireBall:ProjectKurohitsugiBaseToLowestGround(pos)
+    if pos == nil then return pos end
+
+    local result = UE.Vector3(pos.x, pos.y, pos.z)
+
+    local r = self.groundSampleRadius
+    local ir = self.groundSampleInnerRadius
+
+    local samples = {
+        UE.Vector3(0, 0, 0),
+
+        UE.Vector3(r, 0, 0),
+        UE.Vector3(-r, 0, 0),
+        UE.Vector3(0, 0, r),
+        UE.Vector3(0, 0, -r),
+
+        UE.Vector3(r, 0, r),
+        UE.Vector3(r, 0, -r),
+        UE.Vector3(-r, 0, r),
+        UE.Vector3(-r, 0, -r),
+
+        UE.Vector3(ir, 0, ir),
+        UE.Vector3(ir, 0, -ir),
+        UE.Vector3(-ir, 0, ir),
+        UE.Vector3(-ir, 0, -ir),
+    }
+
+    local foundGround = false
+    local lowestY = 0
+
+    for i = 1, #samples do
+        local s = samples[i]
+        local y = self:TryGetGroundYAtXZ(pos.x + s.x, pos.z + s.z)
+
+        if y ~= nil then
+            if not foundGround then
+                lowestY = y
+                foundGround = true
+            elseif y < lowestY then
+                lowestY = y
+            end
+        end
+    end
+
+    if foundGround then
+        result.y = lowestY + self.targetHeightOffset
+    else
+        -- Fallback conservativo: se il raycast non risponde in BT/Lua, manteniamo il vecchio comportamento.
+        result.y = self.targetHeightOffset
+    end
+
+    return result
+end
+
 function spellFireBall:InitTargetPosition()
     local flatDir = self:GetFlatAimDirection()
 
     self.startHandLocalPos = self:GetHandRelativePos()
     self.startTargetPos = self.trans.position + flatDir * self.targetDistance
-    self.startTargetPos.y = self.targetHeightOffset
+    self.startTargetPos = self:ProjectKurohitsugiBaseToLowestGround(self.startTargetPos)
     self.lastTargetPos = self.startTargetPos
 
     if self.targetAreaRoot ~= nil then
@@ -769,7 +902,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
         local targetOffset = self:ClampFlatOffset(handDelta * self.targetMoveMultiplier)
 
         local pos = self.startTargetPos + targetOffset
-        pos.y = self.targetHeightOffset
+        pos = self:ProjectKurohitsugiBaseToLowestGround(pos)
 
         self.targetAreaRoot.position = pos
 
@@ -846,6 +979,8 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     self:FindKurohitsugiObjects()
     self:CalculateSequenceTimes()
     self:CacheVisualData()
+    self:CacheLineDissolveRenderers()
+    self:SetLineDissolveAmount(self.lineDissolveHiddenAmount)
     self:CacheWallDissolveRenderers()
     self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
 
@@ -950,6 +1085,7 @@ function spellFireBall:HideKurohitsugiCastAll()
         self.spikesRoot.gameObject:SetActive(false)
     end
 
+    self:SetLineDissolveAmount(self.lineDissolveHiddenAmount)
     self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
     self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
 
@@ -977,6 +1113,17 @@ function spellFireBall:AnimateLines()
 
     local verticalT = EaseOutCubic((self.sequenceTimer - self.linesStartTime) / self.verticalLinesDuration)
     local topT = EaseOutCubic((self.sequenceTimer - self.topLinesStartTime) / self.topLinesDuration)
+
+    -- Dissolve delle linee: segue la loro materializzazione.
+    -- Usiamo il valore più avanzato tra verticali e top linee, così il materiale diventa pieno
+    -- man mano che l'intero telaio del Kurohitsugi viene disegnato.
+    local lineDissolveT = verticalT
+    if topT > lineDissolveT then
+        lineDissolveT = topT
+    end
+
+    local lineDissolveAmount = Lerp(self.lineDissolveHiddenAmount, self.lineDissolveVisibleAmount, lineDissolveT)
+    self:SetLineDissolveAmount(lineDissolveAmount)
 
     for i = 1, #self.lineData do
         local d = self.lineData[i]
@@ -2376,7 +2523,8 @@ function spellFireBall:CastKurohitsugiAtTarget()
     end
 
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
-    pos.y = self.castHeightOffset
+    pos = self:ProjectKurohitsugiBaseToLowestGround(pos)
+    pos.y = pos.y + self.castHeightOffset
 
     self.castRoot:SetParent(nil, true)
 
