@@ -25,34 +25,7 @@ local spellFireBall = {
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
 
-    -- Ground detection: appoggia target circle e castRoot al terreno reale.
-    -- Serve soprattutto su scale, rampe e dislivelli, dove una Y fissa fa restare il Kurohitsugi sospeso o sotto terra.
-    groundRayStartHeight = 8.0,
-    groundRayDistance = 24.0,
-    groundRayMinValidY = -20.0,
-
-    -- Ground fix V2:
-    -- 1) evita muri/pareti filtrando la normale del raycast;
-    -- 2) campiona più punti sotto l'area del cubo;
-    -- 3) usa il punto più basso tra le superfici valide, così sulle scale il fondo non resta aperto.
-    groundMinNormalY = 0.55,
-    groundFootprintRadius = 1.35,
-
-    -- Preview cube charge animation
-    -- Parte piccolo durante il charge, cresce fino alla scala originale
-    -- e ruota in modo vorticoso/disordinato su più assi.
     rotationSpeed = 130,
-    previewChargeStartTime = 0,
-    previewChargeGrowDuration = 1.15,
-
-    previewCubeBaseScale = nil,
-    previewCubeStartScaleMultiplier = 0.18,
-    previewCubeEndScaleMultiplier = 1.00,
-
-    previewRotationBaseSpeed = 45,
-    previewRotationMaxSpeed = 650,
-    previewRotationChaosAmount = 1.70,
-
     targetMoveMultiplier = 34.0,
     maxTargetMove = 9.0,
 
@@ -232,13 +205,33 @@ local spellFireBall = {
     lineDissolveVisibleAmount = 1.10,
 
     -- Kurohitsugi wall dissolve material control.
-    -- Lo shader usa _DissolveAmount: valori bassi = pareti nascoste, valori alti = pareti visibili.
-    -- Usiamo un range leggermente esteso perché la noise geometrica può lasciare frammenti visibili anche a 0.
+    -- Fase 1: tutte le pareti arrivano al reveal pieno.
+    -- Fase 2: dopo la materializzazione, i gruppi si assestano su valori diversi:
+    --   main walls  -> 0.70
+    --   lower layer -> 0.40
     wallDissolveRenderers = nil,
+    wallDissolveMainRenderers = nil,
+    wallDissolveLowerRenderers = nil,
+
     wallDissolveProperty = "_DissolveAmount",
+
     wallDissolveHiddenAmount = -0.25,
-    wallDissolveVisibleAmount = 1.20,
+
+    -- Valore massimo durante la comparsa iniziale.
+    wallDissolveRevealAmount = 1.20,
+
+    -- Valori finali dopo la comparsa.
+    wallDissolveMainFinalAmount = 0.70,
+    wallDissolveLowerFinalAmount = 0.493,
+
     wallDissolveExtraDuration = 1.80,
+
+    -- Tempo di assestamento dopo il reveal:
+    -- da 1.20 verso 0.70 / 0.40.
+    wallDissolveSettleDuration = 0.20,
+
+    -- Nome del gruppo secondario dentro WallsRoot.
+    wallLowerLayerRootName = "Walls_LowerLayerRoot",
 
     -- Preparazione futura: il top avrà un dissolve dedicato radiale/quadrato, separato dalle pareti.
     topDissolveRenderers = nil,
@@ -651,8 +644,16 @@ end
 
 function spellFireBall:CacheWallDissolveRenderers()
     self.wallDissolveRenderers = {}
+    self.wallDissolveMainRenderers = {}
+    self.wallDissolveLowerRenderers = {}
 
     if self.wallsRoot == nil then return end
+
+    local lowerRoot = nil
+
+    pcall(function()
+        lowerRoot = self.wallsRoot:Find(self.wallLowerLayerRootName)
+    end)
 
     pcall(function()
         local renderers = self.wallsRoot:GetComponentsInChildren(typeof(UE.Renderer), true)
@@ -660,12 +661,38 @@ function spellFireBall:CacheWallDissolveRenderers()
         if renderers ~= nil then
             for i = 0, renderers.Length - 1 do
                 local r = renderers[i]
+
                 if r ~= nil then
                     table.insert(self.wallDissolveRenderers, r)
+
+                    local isLower = false
+
+                    pcall(function()
+                        if lowerRoot ~= nil and r.transform ~= nil then
+                            if r.transform == lowerRoot or r.transform:IsChildOf(lowerRoot) then
+                                isLower = true
+                            end
+                        end
+                    end)
+
+                    if isLower then
+                        table.insert(self.wallDissolveLowerRenderers, r)
+                    else
+                        table.insert(self.wallDissolveMainRenderers, r)
+                    end
                 end
             end
         end
     end)
+end
+
+function spellFireBall:SetWallRendererListDissolveAmount(rendererList, amount)
+    if rendererList == nil then return end
+    if amount == nil then return end
+
+    for i = 1, #rendererList do
+        SafeSetRendererMaterialFloat(rendererList[i], self.wallDissolveProperty, amount)
+    end
 end
 
 function spellFireBall:SetWallDissolveAmount(amount)
@@ -675,11 +702,23 @@ function spellFireBall:SetWallDissolveAmount(amount)
         self:CacheWallDissolveRenderers()
     end
 
-    if self.wallDissolveRenderers == nil then return end
+    self:SetWallRendererListDissolveAmount(self.wallDissolveRenderers, amount)
+end
 
-    for i = 1, #self.wallDissolveRenderers do
-        SafeSetRendererMaterialFloat(self.wallDissolveRenderers[i], self.wallDissolveProperty, amount)
+function spellFireBall:SetWallFinalSplitDissolveAmounts()
+    if self.wallDissolveMainRenderers == nil or self.wallDissolveLowerRenderers == nil then
+        self:CacheWallDissolveRenderers()
     end
+
+    self:SetWallRendererListDissolveAmount(
+        self.wallDissolveMainRenderers,
+        self.wallDissolveMainFinalAmount
+    )
+
+    self:SetWallRendererListDissolveAmount(
+        self.wallDissolveLowerRenderers,
+        self.wallDissolveLowerFinalAmount
+    )
 end
 
 function spellFireBall:CacheTopDissolveRenderers()
@@ -785,61 +824,6 @@ function spellFireBall:ShowKurohitsugiPreview()
     SetActive(self.targetAreaRoot, true)
 end
 
-function spellFireBall:PreparePreviewCubeCharge()
-    self:FindKurohitsugiObjects()
-
-    self.previewChargeStartTime = UE.Time.time
-
-    if self.previewCube == nil then return end
-
-    if self.previewCubeBaseScale == nil then
-        self.previewCubeBaseScale = self.previewCube.localScale
-    end
-
-    self.previewCube.localScale = self.previewCubeBaseScale * self.previewCubeStartScaleMultiplier
-    self.previewCube.localRotation = UE.Quaternion.identity
-end
-
-function spellFireBall:UpdatePreviewCubeChargeVisual()
-    if self.previewCube == nil then return end
-
-    if self.previewCubeBaseScale == nil then
-        self.previewCubeBaseScale = self.previewCube.localScale
-    end
-
-    local elapsed = UE.Time.time - self.previewChargeStartTime
-    local t = Clamp01(elapsed / self.previewChargeGrowDuration)
-    local easedT = EaseOutCubic(t)
-
-    -- Crescita: piccolo -> dimensione originale del prefab.
-    local scaleMul = Lerp(self.previewCubeStartScaleMultiplier, self.previewCubeEndScaleMultiplier, easedT)
-    self.previewCube.localScale = self.previewCubeBaseScale * scaleMul
-
-    -- Rotazione: parte lenta e accelera fino a diventare vorticosa.
-    local speed = Lerp(self.previewRotationBaseSpeed, self.previewRotationMaxSpeed, easedT)
-
-    -- Assi variabili nel tempo: movimento disordinato ma controllato, non random puro.
-    local time = UE.Time.time
-    local chaos = self.previewRotationChaosAmount
-
-    local axis = UE.Vector3(
-        0.65 + UE.Mathf.Sin(time * 4.7) * chaos,
-        1.20 + UE.Mathf.Cos(time * 3.1) * chaos,
-        0.40 + UE.Mathf.Sin(time * 5.9 + 1.7) * chaos
-    )
-
-    if axis.sqrMagnitude < 0.001 then
-        axis = UE.Vector3(0.8, 1.4, 0.45)
-    else
-        axis = axis.normalized
-    end
-
-    -- Piccole pulsazioni di velocità per dare l'effetto carica instabile stile BSR.
-    local pulse = 1.0 + UE.Mathf.Sin(time * 13.0) * 0.20 + UE.Mathf.Sin(time * 21.0) * 0.10
-
-    self.previewCube:Rotate(axis * UE.Time.deltaTime * speed * pulse)
-end
-
 function spellFireBall:GetFlatAimDirection()
     local dir = UE.Vector3(-self.trans.up.x, 0, -self.trans.up.z)
 
@@ -860,229 +844,12 @@ function spellFireBall:ClampFlatOffset(offset)
     return flat
 end
 
-function spellFireBall:GetRaycastArrayCount(hits)
-    if hits == nil then return 0 end
-
-    local count = 0
-
-    pcall(function()
-        count = hits.Length
-    end)
-
-    pcall(function()
-        if (count == nil or count == 0) and hits.Count ~= nil then
-            count = hits.Count
-        end
-    end)
-
-    if count == nil then
-        count = 0
-    end
-
-    return count
-end
-
-function spellFireBall:GetRaycastArrayItem(hits, index)
-    if hits == nil then return nil end
-
-    local item = nil
-
-    pcall(function()
-        item = hits[index]
-    end)
-
-    pcall(function()
-        if item == nil and hits.get_Item ~= nil then
-            item = hits:get_Item(index)
-        end
-    end)
-
-    return item
-end
-
-function spellFireBall:GetRaycastHitPoint(hit)
-    if hit == nil then return nil end
-
-    local point = nil
-
-    pcall(function()
-        point = hit.point
-    end)
-
-    return point
-end
-
-function spellFireBall:GetRaycastHitCollider(hit)
-    if hit == nil then return nil end
-
-    local col = nil
-
-    pcall(function()
-        col = hit.collider
-    end)
-
-    return col
-end
-
-function spellFireBall:GetRaycastHitNormal(hit)
-    if hit == nil then return nil end
-
-    local normal = nil
-
-    pcall(function()
-        normal = hit.normal
-    end)
-
-    return normal
-end
-
-function spellFireBall:IsValidGroundCollider(col)
-    if col == nil then return false end
-
-    local valid = true
-
-    -- Non appoggiamo mai il target su trigger/zone invisibili.
-    pcall(function()
-        if col.isTrigger then
-            valid = false
-        end
-    end)
-
-    -- Evita di colpire parti della gemma, preview, Kurohitsugi stesso, mani/player o oggetti tenuti.
-    pcall(function()
-        if valid and self:NameLooksLikePlayerOrHeldObject(col) then
-            valid = false
-        end
-    end)
-
-    pcall(function()
-        if valid and col.transform ~= nil and self:IsTransformLinkedToPlayer(col.transform) then
-            valid = false
-        end
-    end)
-
-    pcall(function()
-        if valid and self.trans ~= nil and col.transform ~= nil and col.transform.IsChildOf ~= nil and col.transform:IsChildOf(self.trans) then
-            valid = false
-        end
-    end)
-
-    return valid
-end
-
-function spellFireBall:IsValidGroundHit(point, normal, col)
-    if point == nil then return false end
-    if point.y < self.groundRayMinValidY then return false end
-    if not self:IsValidGroundCollider(col) then return false end
-
-    -- Evita che una parete, un muro o un fianco di collider venga considerato terreno.
-    -- Un pavimento piano ha normal.y circa 1; una parete verticale ha normal.y circa 0.
-    if normal ~= nil then
-        if normal.y < self.groundMinNormalY then
-            return false
-        end
-    end
-
-    return true
-end
-
-function spellFireBall:GetHighestGroundPointAt(samplePos)
-    if samplePos == nil then return nil end
-
-    local origin = UE.Vector3(samplePos.x, samplePos.y + self.groundRayStartHeight, samplePos.z)
-    local dir = UE.Vector3.down
-    local bestPoint = nil
-    local bestY = self.groundRayMinValidY
-
-    local hits = nil
-
-    pcall(function()
-        hits = UE.Physics.RaycastAll(origin, dir, self.groundRayDistance)
-    end)
-
-    local count = self:GetRaycastArrayCount(hits)
-
-    for i = 0, count - 1 do
-        local hit = self:GetRaycastArrayItem(hits, i)
-        local point = self:GetRaycastHitPoint(hit)
-        local normal = self:GetRaycastHitNormal(hit)
-        local col = self:GetRaycastHitCollider(hit)
-
-        if self:IsValidGroundHit(point, normal, col) then
-            -- Per ogni singolo raggio prendiamo la superficie valida più alta.
-            -- Così non agganciamo pavimenti sotto la mappa o livelli inferiori attraversati dal raycast.
-            if point.y > bestY then
-                bestY = point.y
-                bestPoint = point
-            end
-        end
-    end
-
-    return bestPoint
-end
-
-function spellFireBall:GetGroundSampleOffsets()
-    local r = self.groundFootprintRadius
-    local d = r * 0.72
-
-    -- Campioniamo centro, assi e diagonali.
-    -- Il cubo è largo circa 3 unità, quindi un raggio 1.35 copre quasi tutta la base senza uscire troppo.
-    return {
-        UE.Vector3(0, 0, 0),
-        UE.Vector3(r, 0, 0),
-        UE.Vector3(-r, 0, 0),
-        UE.Vector3(0, 0, r),
-        UE.Vector3(0, 0, -r),
-        UE.Vector3(d, 0, d),
-        UE.Vector3(-d, 0, d),
-        UE.Vector3(d, 0, -d),
-        UE.Vector3(-d, 0, -d)
-    }
-end
-
-function spellFireBall:GetGroundedPosition(basePos, extraOffset)
-    if basePos == nil then return basePos end
-
-    if extraOffset == nil then
-        extraOffset = 0
-    end
-
-    local fallback = UE.Vector3(basePos.x, basePos.y + extraOffset, basePos.z)
-    local offsets = self:GetGroundSampleOffsets()
-    local chosenY = nil
-
-    for i = 1, #offsets do
-        local o = offsets[i]
-        local samplePos = UE.Vector3(basePos.x + o.x, basePos.y, basePos.z + o.z)
-        local p = self:GetHighestGroundPointAt(samplePos)
-
-        if p ~= nil then
-            -- Tra le superfici reali sotto l'impronta del Kurohitsugi scegliamo la più bassa.
-            -- Questo risolve le scale: il fondo del cubo parte dal gradino più basso coperto dalla base,
-            -- evitando il vuoto visibile sotto una parte della struttura.
-            -- Risolve anche il caso vicino ai muri: se il centro becca una parte alta del muro,
-            -- i raggi laterali trovano il pavimento e vincono perché sono più bassi.
-            if chosenY == nil or p.y < chosenY then
-                chosenY = p.y
-            end
-        end
-    end
-
-    if chosenY ~= nil then
-        return UE.Vector3(basePos.x, chosenY + extraOffset, basePos.z)
-    end
-
-    -- Fallback: se il raycast non trova nulla, non rompiamo la spell.
-    -- Manteniamo la posizione calcolata prima.
-    return fallback
-end
-
 function spellFireBall:InitTargetPosition()
     local flatDir = self:GetFlatAimDirection()
 
     self.startHandLocalPos = self:GetHandRelativePos()
     self.startTargetPos = self.trans.position + flatDir * self.targetDistance
-    self.startTargetPos = self:GetGroundedPosition(self.startTargetPos, self.targetHeightOffset)
+    self.startTargetPos.y = self.targetHeightOffset
     self.lastTargetPos = self.startTargetPos
 
     if self.targetAreaRoot ~= nil then
@@ -1099,7 +866,9 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:UpdateChargeReiatsuBind()
     self:UpdateReiatsuVisual()
 
-    self:UpdatePreviewCubeChargeVisual()
+    if self.previewCube ~= nil then
+        self.previewCube:Rotate(UE.Vector3(0.8, 1.4, 0.45) * UE.Time.deltaTime * self.rotationSpeed)
+    end
 
     if self.targetAreaRoot ~= nil and self.startHandLocalPos ~= nil and self.startTargetPos ~= nil then
         local currentHandLocalPos = self:GetHandRelativePos()
@@ -1107,7 +876,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
         local targetOffset = self:ClampFlatOffset(handDelta * self.targetMoveMultiplier)
 
         local pos = self.startTargetPos + targetOffset
-        pos = self:GetGroundedPosition(pos, self.targetHeightOffset)
+        pos.y = self.targetHeightOffset
 
         self.targetAreaRoot.position = pos
 
@@ -1143,10 +912,6 @@ end
 function spellFireBall:HideKurohitsugiPreviewAll()
     self:StopKurohitsugiPreviewUpdate()
     self:FindKurohitsugiObjects()
-
-    if self.previewCube ~= nil and self.previewCubeBaseScale ~= nil then
-        self.previewCube.localScale = self.previewCubeBaseScale
-    end
 
     SetActive(self.palmPreviewRoot, false)
     SetActive(self.targetAreaRoot, false)
@@ -1356,13 +1121,50 @@ function spellFireBall:AnimateWalls()
     -- Crescita fisica delle pareti.
     local wallT = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / self.wallsGrowDuration)
 
-    -- Dissolve leggermente più lento della crescita fisica:
-    -- le pareti arrivano su, ma la superficie continua a "materializzarsi" per qualche istante.
-    local dissolveDuration = self.wallsGrowDuration + self.wallDissolveExtraDuration
-    local dissolveT = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / dissolveDuration)
+    -- Reveal:
+    -- il dissolve arriva a 1.20 esattamente quando le pareti finiscono di formarsi.
+    -- Non usiamo wallDissolveExtraDuration qui, perché vogliamo il cambio subito dopo la crescita.
+    local revealDuration = self.wallsGrowDuration
+    local revealT = EaseOutCubic((self.sequenceTimer - self.wallsStartTime) / revealDuration)
 
-    local dissolveAmount = Lerp(self.wallDissolveHiddenAmount, self.wallDissolveVisibleAmount, dissolveT)
-    self:SetWallDissolveAmount(dissolveAmount)
+    local revealAmount = Lerp(
+        self.wallDissolveHiddenAmount,
+        self.wallDissolveRevealAmount,
+        revealT
+    )
+
+    -- Settle:
+    -- appena le pareti hanno finito di salire, i materiali passano ai valori finali separati.
+    local settleStartTime = self.wallsStartTime + self.wallsGrowDuration
+    local settleT = Clamp01((self.sequenceTimer - settleStartTime) / self.wallDissolveSettleDuration)
+    settleT = EaseOutCubic(settleT)
+
+    if settleT <= 0 then
+        self:SetWallDissolveAmount(revealAmount)
+    else
+        if self.wallDissolveMainRenderers == nil
+            or self.wallDissolveLowerRenderers == nil
+            or self.wallDissolveRenderers == nil
+            or #self.wallDissolveRenderers == 0 then
+
+            self:CacheWallDissolveRenderers()
+        end
+
+        local mainAmount = Lerp(
+            self.wallDissolveRevealAmount,
+            self.wallDissolveMainFinalAmount,
+            settleT
+        )
+
+        local lowerAmount = Lerp(
+            self.wallDissolveRevealAmount,
+            self.wallDissolveLowerFinalAmount,
+            settleT
+        )
+
+        self:SetWallRendererListDissolveAmount(self.wallDissolveMainRenderers, mainAmount)
+        self:SetWallRendererListDissolveAmount(self.wallDissolveLowerRenderers, lowerAmount)
+    end
 
     for i = 1, #self.wallData do
         local d = self.wallData[i]
@@ -2732,7 +2534,7 @@ function spellFireBall:CastKurohitsugiAtTarget()
     end
 
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
-    pos = self:GetGroundedPosition(pos, self.castHeightOffset)
+    pos.y = self.castHeightOffset
 
     self.castRoot:SetParent(nil, true)
 
@@ -2766,7 +2568,6 @@ function spellFireBall:OnChargeBegin()
     self:ResetKurohitsugiCast()
 
     self:ShowKurohitsugiPreview()
-    self:PreparePreviewCubeCharge()
     self:InitTargetPosition()
     self:ShowReiatsuVisual()
     self:StartKurohitsugiPreviewUpdate()
