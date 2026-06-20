@@ -17,6 +17,7 @@ local spellFireBall = {
     effectsRoot = nil,
     breakPiecesRoot = nil,
     innerDarknessRoot = nil,
+    glowTransitionRoot = nil,
 
     previewCube = nil,
     targetArea = nil,
@@ -24,6 +25,19 @@ local spellFireBall = {
     targetDistance = 4.5,
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
+
+    -- Ground detection: appoggia target circle e castRoot al terreno reale.
+    -- Serve soprattutto su scale, rampe e dislivelli, dove una Y fissa fa restare il Kurohitsugi sospeso o sotto terra.
+    groundRayStartHeight = 8.0,
+    groundRayDistance = 24.0,
+    groundRayMinValidY = -20.0,
+
+    -- Ground fix V2:
+    -- 1) evita muri/pareti filtrando la normale del raycast;
+    -- 2) campiona più punti sotto l'area del cubo;
+    -- 3) usa il punto più basso tra le superfici valide, così sulle scale il fondo non resta aperto.
+    groundMinNormalY = 0.55,
+    groundFootprintRadius = 1.35,
 
     rotationSpeed = 130,
     targetMoveMultiplier = 34.0,
@@ -67,8 +81,24 @@ local spellFireBall = {
     effectsDelay = 0.25,
 
     spikeGrowDuration = 0.12,
-    holdAfterSpikes = 0.65,
-    spikeRetractDuration = 0.22,
+
+    -- Nuova timeline rain/glow:
+    -- cubo completo -> prima scarica -> lampo/glow + seconda scarica -> frantumazione.
+    firstRainAfterTopComplete = 0.10,
+
+    -- I FlyObject non sono istantanei: se il secondo pulse parte troppo presto,
+    -- visivamente entrambe le scariche sembrano arrivare dopo il glow/frantumazione.
+    -- 0.65 lascia vedere la prima scarica dentro il cubo prima del lampo.
+    secondRainAfterFirstRain = 0.65,
+
+    -- Glow di transizione: lampo breve sincronizzato con la seconda scarica.
+    glowTransitionDuration = 0.20,
+
+    -- Dopo la seconda scarica lasciamo un attimo di impatto, poi parte la frantumazione.
+    -- Dopo glow + seconda scarica lasciamo tempo ai dardi di essere visibili
+    -- prima della frantumazione finale.
+    holdAfterSpikes = 0.35,
+    spikeRetractDuration = 0.12,
 
     breakPiecesDuration = 0.35,
     breakPiecesHoldDuration = 0.25,
@@ -104,6 +134,31 @@ local spellFireBall = {
     gravitySpikeCenterForce = 8,
     gravitySpikeSlamForce = 26,
 
+    -- Shockwave diretta sincronizzata con l'onda a terra delle spike.
+    -- La visuale resta Explosion-Ring Down; niente FlyObj dedicato.
+    -- Lo script applica direttamente effetto stile Stomp ai nemici nel raggio.
+    spikeGroundShockWaveEnabled = true,
+    spikeGroundShockWaveSpawned = false,
+    -- Shockwave ad anello: colpisce i nemici intorno al Kurohitsugi,
+    -- ma esclude quelli dentro il cubo. Raggio ampio per test.
+    spikeGroundShockWaveInnerRadius = 2.0,
+    spikeGroundShockWaveOuterRadius = 10.0,
+    spikeGroundShockWaveRadius = 10.0,
+    spikeGroundShockWaveCenterHeight = 0.55,
+    -- Shockwave diretta: test reazione visibile.
+    -- Il danno hit-scan resta spento per ora perché il damage host della gemma può essere nil.
+    spikeGroundShockWaveDamageEnabled = false,
+    spikeGroundShockWaveDoStiffTime = 1.25,
+    spikeGroundShockWaveDizzyTime = 0.90,
+    spikeGroundShockWavePushbackDis = 10,
+    spikeGroundShockWaveProtectTime = 2,
+    spikeGroundShockWaveUseKnockout = true,
+    spikeGroundShockWaveUseThrowing = true,
+    spikeGroundShockWaveOutwardForce = 95,
+    spikeGroundShockWaveUpForce = 65,
+    spikeGroundShockWaveDownForce = 0,
+    spikeGroundShockWaveGravityOffTime = 0.35,
+
     -- Stop gravity prima della frantumazione: piccolo colpo di chiusura, non esplosivo.
     gravityFinalSlamForce = 10,
     gravityFinalCenterForce = 0,
@@ -135,12 +190,15 @@ local spellFireBall = {
     kurohitsugiRainStopBeforeBreak = 0.15,
     kurohitsugiRainPulseInterval = 0.18,
     kurohitsugiRainLastPulseTime = -999,
+    -- Se false, i dardi non partono come pioggia continua a intervalli: li controlliamo noi
+    -- con due pulse manuali: prima scarica a cubo completo, seconda scarica con il lampo/glow.
+    kurohitsugiRainUseAutoPulses = false,
     kurohitsugiRainObjectsPerPulse = 6,
-    kurohitsugiRainSpawnHeight = 5.75,
+    kurohitsugiRainSpawnHeight = 4.25,
     kurohitsugiRainTargetHeight = 0.85,
     kurohitsugiRainRadius = 1.28,
     kurohitsugiRainPulseIndex = 0,
-    kurohitsugiRainMaxPulseCount = 3,
+    kurohitsugiRainMaxPulseCount = 2,
     kurohitsugiRainTargetInwardMultiplier = 0.45,
 
     -- Filtro sicurezza: evita che la Gravity Zone tocchi player/mani/gemma,
@@ -159,13 +217,13 @@ local spellFireBall = {
 
     -- V1.5: manteniamo la pressione fisica della V1, ma la riduciamo per evitare vibrazione eccessiva.
     -- Aggiungiamo anche DoStiff ispirato alla Telekinesis, senza usare joint ad area.
-    chargeReiatsuDownForce = 10,
-    chargeReiatsuVelocityDamping = 0.22,
-    chargeReiatsuGravityOffTime = 0.10,
-    chargeReiatsuKnockout = true,
-    chargeReiatsuAngularDamping = 0.35,
+    chargeReiatsuDownForce = 16,
+    chargeReiatsuVelocityDamping = 0.35,
+    chargeReiatsuGravityOffTime = 0.18,
+    chargeReiatsuKnockout = false,
+    chargeReiatsuAngularDamping = 0.50,
     chargeReiatsuUseStiff = true,
-    chargeReiatsuStiffDuration = 1.20,
+    chargeReiatsuStiffDuration = 0.65,
 
     -- V2.1: interrupt stile Telecinesi, ma SOLO sui logic target.
     -- Non usa Character Sweep e non prosegue dopo il release, così non dovrebbe rompere il cast.
@@ -179,13 +237,20 @@ local spellFireBall = {
     retractedSpikes = false,
     startedBreakPieces = false,
     startedInnerDarkness = false,
+    startedGlowTransition = false,
+    stoppedGlowTransition = false,
+    startedFirstRainPulse = false,
+    startedSecondRainPulse = false,
 
     linesStartTime = 0,
     topLinesStartTime = 0,
     wallsStartTime = 0,
     topStartTime = 0,
     effectsTime = 0,
+    firstRainTime = 0,
+    secondRainTime = 0,
     spikesTime = 0,
+    glowTransitionTime = 0,
     spikeRetractTime = 0,
     breakPiecesTime = 0,
     hideTime = 0,
@@ -208,7 +273,7 @@ local spellFireBall = {
     -- Fase 1: tutte le pareti arrivano al reveal pieno.
     -- Fase 2: dopo la materializzazione, i gruppi si assestano su valori diversi:
     --   main walls  -> 0.70
-    --   lower layer -> 0.40
+    --   lower layer -> 0.493
     wallDissolveRenderers = nil,
     wallDissolveMainRenderers = nil,
     wallDissolveLowerRenderers = nil,
@@ -227,7 +292,7 @@ local spellFireBall = {
     wallDissolveExtraDuration = 1.80,
 
     -- Tempo di assestamento dopo il reveal:
-    -- da 1.20 verso 0.70 / 0.40.
+    -- da 1.20 verso 0.70 / 0.493.
     wallDissolveSettleDuration = 0.20,
 
     -- Nome del gruppo secondario dentro WallsRoot.
@@ -377,12 +442,29 @@ function spellFireBall:CalculateSequenceTimes()
     self.topStartTime = self.wallsStartTime + self.wallsGrowDuration + self.wallsDelay
 
     self.effectsTime = self.topStartTime + self.topGrowDuration + self.topDelay
-    self.spikesTime = self.effectsTime + self.effectsDelay
+
+    -- Nuova timeline:
+    -- 1) il cubo/top si chiude;
+    -- 2) parte la prima scarica;
+    -- 3) poco dopo parte il lampo/glow con la seconda scarica;
+    -- 4) le spike/fiamme si muovono in questa finestra e poi arriva la frantumazione.
+    local topCompleteTime = self.topStartTime + self.topGrowDuration
+    self.firstRainTime = topCompleteTime + self.firstRainAfterTopComplete
+    self.secondRainTime = self.firstRainTime + self.secondRainAfterFirstRain
+
+    self.glowTransitionTime = self.secondRainTime
+    self.spikesTime = self.secondRainTime
 
     self.spikeRetractTime = self.spikesTime + self.spikeGrowDuration + self.holdAfterSpikes
     self.breakPiecesTime = self.spikeRetractTime + self.spikeRetractDuration
 
     self.hideTime = self.breakPiecesTime + self.breakPiecesDuration + self.breakPiecesHoldDuration
+
+    print("KUROHITSUGI TIMING - topComplete=" .. tostring(topCompleteTime)
+        .. " firstRain=" .. tostring(self.firstRainTime)
+        .. " secondRain/glow=" .. tostring(self.secondRainTime)
+        .. " glowEnd=" .. tostring(self.glowTransitionTime + self.glowTransitionDuration)
+        .. " break=" .. tostring(self.breakPiecesTime))
 end
 
 function spellFireBall:FindKurohitsugiObjects()
@@ -436,6 +518,10 @@ function spellFireBall:FindKurohitsugiObjects()
 
     if self.innerDarknessRoot == nil and self.sequenceRoot ~= nil then
         self.innerDarknessRoot = self.sequenceRoot:Find("InnerDarknessRoot")
+    end
+
+    if self.glowTransitionRoot == nil and self.sequenceRoot ~= nil then
+        self.glowTransitionRoot = self.sequenceRoot:Find("GlowTransitionRoot")
     end
 
     if self.previewCube == nil and self.palmPreviewRoot ~= nil then
@@ -844,12 +930,229 @@ function spellFireBall:ClampFlatOffset(offset)
     return flat
 end
 
+function spellFireBall:GetRaycastArrayCount(hits)
+    if hits == nil then return 0 end
+
+    local count = 0
+
+    pcall(function()
+        count = hits.Length
+    end)
+
+    pcall(function()
+        if (count == nil or count == 0) and hits.Count ~= nil then
+            count = hits.Count
+        end
+    end)
+
+    if count == nil then
+        count = 0
+    end
+
+    return count
+end
+
+function spellFireBall:GetRaycastArrayItem(hits, index)
+    if hits == nil then return nil end
+
+    local item = nil
+
+    pcall(function()
+        item = hits[index]
+    end)
+
+    pcall(function()
+        if item == nil and hits.get_Item ~= nil then
+            item = hits:get_Item(index)
+        end
+    end)
+
+    return item
+end
+
+function spellFireBall:GetRaycastHitPoint(hit)
+    if hit == nil then return nil end
+
+    local point = nil
+
+    pcall(function()
+        point = hit.point
+    end)
+
+    return point
+end
+
+function spellFireBall:GetRaycastHitCollider(hit)
+    if hit == nil then return nil end
+
+    local col = nil
+
+    pcall(function()
+        col = hit.collider
+    end)
+
+    return col
+end
+
+function spellFireBall:GetRaycastHitNormal(hit)
+    if hit == nil then return nil end
+
+    local normal = nil
+
+    pcall(function()
+        normal = hit.normal
+    end)
+
+    return normal
+end
+
+function spellFireBall:IsValidGroundCollider(col)
+    if col == nil then return false end
+
+    local valid = true
+
+    -- Non appoggiamo mai il target su trigger/zone invisibili.
+    pcall(function()
+        if col.isTrigger then
+            valid = false
+        end
+    end)
+
+    -- Evita di colpire parti della gemma, preview, Kurohitsugi stesso, mani/player o oggetti tenuti.
+    pcall(function()
+        if valid and self:NameLooksLikePlayerOrHeldObject(col) then
+            valid = false
+        end
+    end)
+
+    pcall(function()
+        if valid and col.transform ~= nil and self:IsTransformLinkedToPlayer(col.transform) then
+            valid = false
+        end
+    end)
+
+    pcall(function()
+        if valid and self.trans ~= nil and col.transform ~= nil and col.transform.IsChildOf ~= nil and col.transform:IsChildOf(self.trans) then
+            valid = false
+        end
+    end)
+
+    return valid
+end
+
+function spellFireBall:IsValidGroundHit(point, normal, col)
+    if point == nil then return false end
+    if point.y < self.groundRayMinValidY then return false end
+    if not self:IsValidGroundCollider(col) then return false end
+
+    -- Evita che una parete, un muro o un fianco di collider venga considerato terreno.
+    -- Un pavimento piano ha normal.y circa 1; una parete verticale ha normal.y circa 0.
+    if normal ~= nil then
+        if normal.y < self.groundMinNormalY then
+            return false
+        end
+    end
+
+    return true
+end
+
+function spellFireBall:GetHighestGroundPointAt(samplePos)
+    if samplePos == nil then return nil end
+
+    local origin = UE.Vector3(samplePos.x, samplePos.y + self.groundRayStartHeight, samplePos.z)
+    local dir = UE.Vector3.down
+    local bestPoint = nil
+    local bestY = self.groundRayMinValidY
+
+    local hits = nil
+
+    pcall(function()
+        hits = UE.Physics.RaycastAll(origin, dir, self.groundRayDistance)
+    end)
+
+    local count = self:GetRaycastArrayCount(hits)
+
+    for i = 0, count - 1 do
+        local hit = self:GetRaycastArrayItem(hits, i)
+        local point = self:GetRaycastHitPoint(hit)
+        local normal = self:GetRaycastHitNormal(hit)
+        local col = self:GetRaycastHitCollider(hit)
+
+        if self:IsValidGroundHit(point, normal, col) then
+            -- Per ogni singolo raggio prendiamo la superficie valida più alta.
+            -- Così non agganciamo pavimenti sotto la mappa o livelli inferiori attraversati dal raycast.
+            if point.y > bestY then
+                bestY = point.y
+                bestPoint = point
+            end
+        end
+    end
+
+    return bestPoint
+end
+
+function spellFireBall:GetGroundSampleOffsets()
+    local r = self.groundFootprintRadius
+    local d = r * 0.72
+
+    -- Campioniamo centro, assi e diagonali.
+    -- Il cubo è largo circa 3 unità, quindi un raggio 1.35 copre quasi tutta la base senza uscire troppo.
+    return {
+        UE.Vector3(0, 0, 0),
+        UE.Vector3(r, 0, 0),
+        UE.Vector3(-r, 0, 0),
+        UE.Vector3(0, 0, r),
+        UE.Vector3(0, 0, -r),
+        UE.Vector3(d, 0, d),
+        UE.Vector3(-d, 0, d),
+        UE.Vector3(d, 0, -d),
+        UE.Vector3(-d, 0, -d)
+    }
+end
+
+function spellFireBall:GetGroundedPosition(basePos, extraOffset)
+    if basePos == nil then return basePos end
+
+    if extraOffset == nil then
+        extraOffset = 0
+    end
+
+    local fallback = UE.Vector3(basePos.x, basePos.y + extraOffset, basePos.z)
+    local offsets = self:GetGroundSampleOffsets()
+    local chosenY = nil
+
+    for i = 1, #offsets do
+        local o = offsets[i]
+        local samplePos = UE.Vector3(basePos.x + o.x, basePos.y, basePos.z + o.z)
+        local p = self:GetHighestGroundPointAt(samplePos)
+
+        if p ~= nil then
+            -- Tra le superfici reali sotto l'impronta del Kurohitsugi scegliamo la più bassa.
+            -- Questo risolve le scale: il fondo del cubo parte dal gradino più basso coperto dalla base,
+            -- evitando il vuoto visibile sotto una parte della struttura.
+            -- Risolve anche il caso vicino ai muri: se il centro becca una parte alta del muro,
+            -- i raggi laterali trovano il pavimento e vincono perché sono più bassi.
+            if chosenY == nil or p.y < chosenY then
+                chosenY = p.y
+            end
+        end
+    end
+
+    if chosenY ~= nil then
+        return UE.Vector3(basePos.x, chosenY + extraOffset, basePos.z)
+    end
+
+    -- Fallback: se il raycast non trova nulla, non rompiamo la spell.
+    -- Manteniamo la posizione calcolata prima.
+    return fallback
+end
+
 function spellFireBall:InitTargetPosition()
     local flatDir = self:GetFlatAimDirection()
 
     self.startHandLocalPos = self:GetHandRelativePos()
     self.startTargetPos = self.trans.position + flatDir * self.targetDistance
-    self.startTargetPos.y = self.targetHeightOffset
+    self.startTargetPos = self:GetGroundedPosition(self.startTargetPos, self.targetHeightOffset)
     self.lastTargetPos = self.startTargetPos
 
     if self.targetAreaRoot ~= nil then
@@ -876,7 +1179,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
         local targetOffset = self:ClampFlatOffset(handDelta * self.targetMoveMultiplier)
 
         local pos = self.startTargetPos + targetOffset
-        pos.y = self.targetHeightOffset
+        pos = self:GetGroundedPosition(pos, self.targetHeightOffset)
 
         self.targetAreaRoot.position = pos
 
@@ -932,12 +1235,17 @@ function spellFireBall:ResetSequenceFlags()
     self.retractedSpikes = false
     self.startedBreakPieces = false
     self.startedInnerDarkness = false
+    self.startedGlowTransition = false
+    self.stoppedGlowTransition = false
+    self.startedFirstRainPulse = false
+    self.startedSecondRainPulse = false
 
     self.gravityZoneStarted = false
     self.gravityZoneEndTime = 0
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+    self.spikeGroundShockWaveSpawned = false
 
     self.chargeReiatsuActive = false
     self.chargeReiatsuLastTick = 0
@@ -969,6 +1277,8 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     SetActive(self.effectsRoot, false)
     SetActive(self.breakPiecesRoot, false)
     SetActive(self.innerDarknessRoot, false)
+    StopParticleSystemsInRoot(self.glowTransitionRoot)
+    SetActive(self.glowTransitionRoot, false)
 
     if self.spikesRoot ~= nil then
         self.spikesRoot.gameObject:SetActive(true)
@@ -1053,6 +1363,8 @@ function spellFireBall:HideKurohitsugiCastAll()
     SetActive(self.effectsRoot, false)
     SetActive(self.breakPiecesRoot, false)
     SetActive(self.innerDarknessRoot, false)
+    StopParticleSystemsInRoot(self.glowTransitionRoot)
+    SetActive(self.glowTransitionRoot, false)
 
     if self.spikesRoot ~= nil then
         SetChildrenActive(self.spikesRoot, false)
@@ -1075,6 +1387,7 @@ function spellFireBall:HideKurohitsugiCastAll()
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+    self.spikeGroundShockWaveSpawned = false
 
     self:StopChargeReiatsuBind()
 
@@ -2097,8 +2410,393 @@ function spellFireBall:ApplyGravitySpikePush()
         local pu = self:GetListItem(targets, i)
         self:ApplySpikePushToPhysicsUnit(pu, center)
     end
-
+    self:SpawnSpikeGroundShockWave()
     print("KUROHITSUGI TEST - Gravity spike controlled push")
+end
+
+
+function spellFireBall:GetSpikeGroundShockWaveCenter()
+    if self.castRoot ~= nil then
+        return self.castRoot.position + UE.Vector3(0, self.spikeGroundShockWaveCenterHeight or 0.55, 0)
+    end
+
+    return self:GetKurohitsugiGravityCenter()
+end
+
+function spellFireBall:GetSpikeShockWaveDir(pu, center)
+    local dir = UE.Vector3.forward
+    local puPos = self:GetPhysicsUnitPosition(pu)
+
+    if puPos ~= nil and center ~= nil then
+        dir = puPos - center
+        dir.y = 0
+
+        if dir.sqrMagnitude <= 0.001 then
+            dir = UE.Vector3.forward
+        else
+            dir = dir.normalized
+        end
+    end
+
+    return dir
+end
+
+function spellFireBall:IsTargetInsideSpikeShockWaveRing(pu, center)
+    if pu == nil then return false end
+    if center == nil then return false end
+
+    local pos = self:GetPhysicsUnitPosition(pu)
+    if pos == nil then return false end
+
+    local offset = pos - center
+    offset.y = 0
+
+    local distance = offset.magnitude
+    local inner = self.spikeGroundShockWaveInnerRadius or 2.0
+    local outer = self.spikeGroundShockWaveOuterRadius or self.spikeGroundShockWaveRadius or 10.0
+
+    if distance < inner then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped inside ring target="
+            .. tostring(self:GetSafeName(pu))
+            .. " distance=" .. tostring(distance))
+        return false
+    end
+
+    if distance > outer then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped outside ring target="
+            .. tostring(self:GetSafeName(pu))
+            .. " distance=" .. tostring(distance))
+        return false
+    end
+
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE ring target="
+        .. tostring(self:GetSafeName(pu))
+        .. " distance=" .. tostring(distance))
+
+    return true
+end
+
+function spellFireBall:IsSpikeShockWaveValidTarget(pu)
+    if pu == nil then return false end
+
+    -- Evita la gemma / host dello script.
+    if self.host ~= nil and pu == self.host then return false end
+    if self.interact ~= nil and pu == self.interact then return false end
+
+    -- Evita player e mani tramite unitType, non tramite nome "controller":
+    -- molti nemici validi arrivano come "goblinsmall... controller".
+    local isPlayer = false
+    pcall(function()
+        if pu.unitType == CL.Tagger.Tag.PlayerRole or pu.unitType == CL.Tagger.Tag.PlayerHand then
+            isPlayer = true
+        end
+    end)
+    if isPlayer then return false end
+
+    local tr = self:GetPhysicsUnitTransform(pu)
+    if self:IsTransformLinkedToPlayer(tr) then
+        return false
+    end
+
+    -- Target ideale: role/nemico.
+    local isRole = false
+    pcall(function()
+        isRole = pu.unitType == CL.Tagger.Tag.InteractRole
+    end)
+    if isRole then return true end
+
+    -- Accetta anche controller/root di nemici che espongono questi componenti,
+    -- anche se il nome contiene "controller".
+    if pu.controller ~= nil or pu.muscleState ~= nil or pu.actor ~= nil or pu.motion ~= nil then
+        return true
+    end
+
+    -- Ultimo filtro leggero: esclude solo oggetti chiaramente nostri/preview/mani.
+    local n = self:GetSafeName(pu)
+    if n ~= nil and n ~= "" then
+        local blocked = {
+            "player",
+            "hand",
+            "glove",
+            "mountpoint",
+            "palmpreview",
+            "targetarea",
+            "preview",
+            "exp_kurohitsugi_gem",
+            "kurohitsugi_rainstring"
+        }
+
+        for i = 1, #blocked do
+            if string.find(n, blocked[i]) ~= nil then
+                return false
+            end
+        end
+    end
+
+    return false
+end
+
+function spellFireBall:GetSpikeShockWaveRoleTarget(pu)
+    if pu == nil then return nil end
+
+    -- Se è già un role target, usalo direttamente.
+    local isRole = false
+    pcall(function()
+        isRole = pu.unitType == CL.Tagger.Tag.InteractRole
+    end)
+
+    if isRole then
+        return pu
+    end
+
+    -- Alcune query fisiche tornano ossa/parti. Proviamo a risalire al root.
+    local root = nil
+    pcall(function()
+        if pu.GetRootPu ~= nil then
+            root = pu:GetRootPu()
+        end
+    end)
+
+    if root ~= nil then
+        local rootIsRole = false
+        pcall(function()
+            rootIsRole = root.unitType == CL.Tagger.Tag.InteractRole
+        end)
+        if rootIsRole then
+            return root
+        end
+
+        -- Se il root sembra un controller/role nemico, usiamo lui come target principale.
+        if root.controller ~= nil or root.muscleState ~= nil or root.actor ~= nil or root.motion ~= nil then
+            return root
+        end
+    end
+
+    return pu
+end
+
+function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
+    if pu == nil then return false end
+    if center == nil then return false end
+
+    local target = self:GetSpikeShockWaveRoleTarget(pu)
+    if target == nil then target = pu end
+
+    if not self:IsTargetInsideSpikeShockWaveRing(target, center) then
+        return false
+    end
+
+    if not self:IsSpikeShockWaveValidTarget(target) then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped target=" .. tostring(self:GetSafeName(target)))
+        return false
+    end
+
+    local col = self:GetPhysicsUnitCollider(target)
+    if col == nil then
+        col = self:GetPhysicsUnitCollider(pu)
+    end
+
+    local dir = self:GetSpikeShockWaveDir(target, center)
+    local appliedSomething = false
+
+    -- 1) Danno stile Stomp/FlySlash: BeginScanDmg -> ApplyHitScanDamage -> EndHitScan.
+    if self.spikeGroundShockWaveDamageEnabled and col ~= nil then
+        local host = self:GetKurohitsugiDamageHost()
+
+        if host ~= nil then
+            local okDmg = pcall(function()
+                CL.InteractTrigger.BeginScanDmg()
+                CL.InteractTrigger.ApplyHitScanDamage(col, host, host.rb, host.col, dir, host.camp)
+                CL.InteractTrigger.EndHitScan()
+            end)
+
+            if okDmg then
+                appliedSomething = true
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE damage applied")
+            end
+        else
+            print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE damage host nil")
+        end
+    end
+
+    -- 2) Reazione muscolare stile Stomp: stiff + clear stab + dizzy.
+    pcall(function()
+        if target.muscleState ~= nil then
+            target.muscleState:DoStiff(self.spikeGroundShockWaveDoStiffTime or 1.0)
+            target.muscleState:ClearAllStab()
+            target.muscleState:EnterDizzy(self.spikeGroundShockWaveDizzyTime or 0.6)
+            appliedSomething = true
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE muscle reaction applied")
+        end
+    end)
+
+    -- 3) Interrompe l'azione corrente, come nello Stomp.
+    pcall(function()
+        if target.actor ~= nil then
+            target.actor:StopAction(false)
+            appliedSomething = true
+        end
+    end)
+
+    pcall(function()
+        if target.motion ~= nil then
+            target.motion:ProtectMotionFunctionForAWhile(self.spikeGroundShockWaveProtectTime or 2)
+            appliedSomething = true
+        end
+    end)
+
+    -- 4) Pushback vero sul controller, stesso approccio dello Stomp.
+    pcall(function()
+        if target.controller ~= nil then
+            target.controller:AddPushback(center, self.spikeGroundShockWavePushbackDis or 10, true)
+            appliedSomething = true
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pushback applied")
+        end
+    end)
+
+    -- 5) Reazione fisica aggressiva controllata: serve a capire se stiamo toccando il corpo giusto.
+    local impulse = dir * (self.spikeGroundShockWaveOutwardForce or 95)
+        + UE.Vector3.up * (self.spikeGroundShockWaveUpForce or 65)
+        + UE.Vector3.down * (self.spikeGroundShockWaveDownForce or 0)
+
+    pcall(function()
+        if target.DisableGravityAWhile ~= nil then
+            target:DisableGravityAWhile(self.spikeGroundShockWaveGravityOffTime or 0.35)
+        end
+    end)
+
+    pcall(function()
+        if target.SetKinematic ~= nil then
+            target:SetKinematic(false)
+        end
+    end)
+
+    pcall(function()
+        if target.AddForce ~= nil then
+            target:AddForce(impulse, UE.ForceMode.Impulse)
+            appliedSomething = true
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE target AddForce applied")
+        end
+    end)
+
+    pcall(function()
+        if pu ~= target and pu.AddForce ~= nil then
+            pu:AddForce(impulse, UE.ForceMode.Impulse)
+            appliedSomething = true
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pu AddForce applied")
+        end
+    end)
+
+    pcall(function()
+        local rb = self:GetPhysicsUnitRigidbody(target)
+        if rb == nil then
+            rb = self:GetPhysicsUnitRigidbody(pu)
+        end
+
+        if rb ~= nil then
+            rb.isKinematic = false
+            rb:AddForce(impulse, UE.ForceMode.Impulse)
+            rb:AddTorque(UE.Random.insideUnitSphere * 50, UE.ForceMode.Impulse)
+            appliedSomething = true
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE rb impulse applied")
+        end
+    end)
+
+    -- 6) Knockout/throwing opzionale per test visivo. Se funziona, poi lo abbassiamo.
+    if self.spikeGroundShockWaveUseKnockout then
+        pcall(function()
+            if target.motion ~= nil then
+                target.motion:Knockout()
+                appliedSomething = true
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE knockout applied")
+            end
+        end)
+    end
+
+    if self.spikeGroundShockWaveUseThrowing then
+        pcall(function()
+            if target.muscleState ~= nil then
+                target.muscleState:DoThrowing()
+                appliedSomething = true
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE throwing applied")
+            end
+        end)
+    end
+
+    return appliedSomething
+end
+
+function spellFireBall:SpawnSpikeGroundShockWave()
+    -- Nome mantenuto per compatibilità col punto di chiamata già esistente.
+    -- Ora NON spawna più un FlyObj: applica direttamente l'effetto fisico Stomp-like.
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE CALLED")
+
+    if not self.spikeGroundShockWaveEnabled then
+        print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE disabled")
+        return
+    end
+
+    if self.spikeGroundShockWaveSpawned then
+        print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE already used")
+        return
+    end
+
+    self.spikeGroundShockWaveSpawned = true
+
+    local center = self:GetSpikeGroundShockWaveCenter()
+    local radius = self.spikeGroundShockWaveOuterRadius or self.spikeGroundShockWaveRadius or self.gravityZoneRadius or 10.0
+    local inner = self.spikeGroundShockWaveInnerRadius or 2.0
+
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE center=" .. tostring(center)
+        .. " inner=" .. tostring(inner)
+        .. " outer=" .. tostring(radius))
+
+    local logicTargets = nil
+    local physicsTargets = nil
+
+    local okLogic = pcall(function()
+        logicTargets = CL.PhysicsUnit.QueryLogicTargetInRadiusTemp(center, radius)
+    end)
+
+    local logicCount = self:GetListCount(logicTargets)
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE logic ok=" .. tostring(okLogic) .. " count=" .. tostring(logicCount))
+
+    local okPhysics = pcall(function()
+        physicsTargets = CL.PhysicsUnit.QueryInRadiusTemp(center, radius)
+    end)
+
+    local physicsCount = self:GetListCount(physicsTargets)
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE physics ok=" .. tostring(okPhysics) .. " count=" .. tostring(physicsCount))
+
+    local appliedCount = 0
+    local appliedMap = {}
+
+    for i = 0, logicCount - 1 do
+        local pu = self:GetListItem(logicTargets, i)
+        local target = self:GetSpikeShockWaveRoleTarget(pu) or pu
+
+        if target ~= nil and not appliedMap[target] then
+            appliedMap[target] = true
+            if self:ApplySpikeGroundShockWaveToPhysicsUnit(target, center) then
+                appliedCount = appliedCount + 1
+            end
+        end
+    end
+
+    -- Fallback fisico sempre attivo, ma deduplicato sul root/role target.
+    for i = 0, physicsCount - 1 do
+        local pu = self:GetListItem(physicsTargets, i)
+        local target = self:GetSpikeShockWaveRoleTarget(pu) or pu
+
+        if target ~= nil and not appliedMap[target] then
+            appliedMap[target] = true
+            if self:ApplySpikeGroundShockWaveToPhysicsUnit(target, center) then
+                appliedCount = appliedCount + 1
+            end
+        end
+    end
+
+    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE applied=" .. tostring(appliedCount))
 end
 
 function spellFireBall:ApplyGravityFinalSlamToPhysicsUnit(pu, center)
@@ -2344,6 +3042,7 @@ end
 
 function spellFireBall:UpdateKurohitsugiFlyRain()
     if not self:IsRainFlyObjectConfigured() then return end
+    if not self.kurohitsugiRainUseAutoPulses then return end
 
     local startTime = self.spikesTime + self.kurohitsugiRainStartDelayFromSpikes
     local endTime = self.breakPiecesTime - self.kurohitsugiRainStopBeforeBreak
@@ -2360,6 +3059,71 @@ function spellFireBall:UpdateKurohitsugiFlyRain()
     if self.sequenceTimer - self.kurohitsugiRainLastPulseTime >= self.kurohitsugiRainPulseInterval then
         self.kurohitsugiRainLastPulseTime = self.sequenceTimer
         self:SpawnKurohitsugiFlyRainPulse()
+    end
+end
+
+
+function spellFireBall:StartGlowTransition()
+    if self.glowTransitionRoot == nil then return end
+    if self.startedGlowTransition then return end
+
+    self.startedGlowTransition = true
+    self.stoppedGlowTransition = false
+
+    SetActive(self.glowTransitionRoot, true)
+    PlayParticleSystemsInRoot(self.glowTransitionRoot)
+
+    print("KUROHITSUGI TEST - Glow transition started")
+end
+
+function spellFireBall:StopGlowTransition()
+    if self.glowTransitionRoot == nil then return end
+    if self.stoppedGlowTransition then return end
+
+    self.stoppedGlowTransition = true
+
+    StopParticleSystemsInRoot(self.glowTransitionRoot)
+    SetActive(self.glowTransitionRoot, false)
+
+    print("KUROHITSUGI TEST - Glow transition stopped")
+end
+
+function spellFireBall:UpdateGlowTransition()
+    if self.glowTransitionRoot == nil then return end
+
+    if self.sequenceTimer >= self.glowTransitionTime and not self.startedGlowTransition then
+        self:StartGlowTransition()
+    end
+
+    if self.startedGlowTransition
+        and not self.stoppedGlowTransition
+        and self.sequenceTimer >= self.glowTransitionTime + self.glowTransitionDuration then
+
+        self:StopGlowTransition()
+    end
+end
+
+function spellFireBall:UpdateFirstRainPulseAfterCubeComplete()
+    if self.startedFirstRainPulse then return end
+    if not self:IsRainFlyObjectConfigured() then return end
+
+    if self.sequenceTimer >= self.firstRainTime then
+        self.startedFirstRainPulse = true
+        self.kurohitsugiRainLastPulseTime = self.sequenceTimer
+        self:SpawnKurohitsugiFlyRainPulse()
+        print("KUROHITSUGI TEST - First rain pulse after cube complete")
+    end
+end
+
+function spellFireBall:UpdateSecondRainPulseWithGlow()
+    if self.startedSecondRainPulse then return end
+    if not self:IsRainFlyObjectConfigured() then return end
+
+    if self.sequenceTimer >= self.secondRainTime then
+        self.startedSecondRainPulse = true
+        self.kurohitsugiRainLastPulseTime = self.sequenceTimer
+        self:SpawnKurohitsugiFlyRainPulse()
+        print("KUROHITSUGI TEST - Second rain pulse with glow")
     end
 end
 
@@ -2396,6 +3160,9 @@ function spellFireBall:UpdateKurohitsugiSequence()
     self:UpdateKurohitsugiGravityZone()
     self:UpdateKurohitsugiSlashDamage()
     self:UpdateKurohitsugiFlyRain()
+    self:UpdateFirstRainPulseAfterCubeComplete()
+    self:UpdateGlowTransition()
+    self:UpdateSecondRainPulseWithGlow()
 
     if self.sequenceTimer >= self.spikesTime and self.sequenceTimer < self.spikeRetractTime then
         if not self.startedSpikes then
@@ -2406,15 +3173,16 @@ function spellFireBall:UpdateKurohitsugiSequence()
             end
 
             -- Push controllato sincronizzato con l'uscita delle spike.
+            -- La shockwave fisica viene spawnata dentro ApplyGravitySpikePush(),
+            -- così parte nello stesso momento del push e non viene chiamata due volte.
             self:ApplyGravitySpikePush()
 
             -- Primo pulse immediato di danno interno stile slash.
             self.kurohitsugiSlashLastPulseTime = -999
             self:ApplyKurohitsugiSlashDamagePulse()
 
-            -- Primo pulse immediato della pioggia FlyObject, se configurata.
-            self.kurohitsugiRainLastPulseTime = -999
-            self:SpawnKurohitsugiFlyRainPulse()
+            -- La rain non parte più con le spike: ora è controllata da
+            -- UpdateFirstRainPulseAfterCubeComplete() e UpdateSecondRainPulseWithGlow().
         end
 
         self:AnimateSpikesGrow()
@@ -2443,6 +3211,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
             SetActive(self.wallsRoot, false)
             SetActive(self.topRoot, false)
             SetActive(self.innerDarknessRoot, false)
+            self:StopGlowTransition()
 
             if self.spikesRoot ~= nil then
                 SetChildrenActive(self.spikesRoot, false)
@@ -2502,6 +3271,10 @@ function spellFireBall:ResetKurohitsugiCast()
     self.kurohitsugiSlashStarted = false
     self.kurohitsugiRainLastPulseTime = -999
     self.kurohitsugiRainPulseIndex = 0
+    self.startedFirstRainPulse = false
+    self.startedSecondRainPulse = false
+    self.startedGlowTransition = false
+    self.stoppedGlowTransition = false
 
     if self.castRoot ~= nil then
         self.castRoot:SetParent(self.trans, true)
@@ -2534,7 +3307,7 @@ function spellFireBall:CastKurohitsugiAtTarget()
     end
 
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
-    pos.y = self.castHeightOffset
+    pos = self:GetGroundedPosition(pos, self.castHeightOffset)
 
     self.castRoot:SetParent(nil, true)
 
