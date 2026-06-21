@@ -277,6 +277,18 @@ local spellFireBall = {
     gripCancelDebugInterval = 0.35,
     gripCancelNextDebugTime = 0,
 
+    -- Grip Reiatsu Only V2:
+    -- modalità separata: Grip senza Trigger = solo Spiritual Pressure dedicata.
+    -- Nota: NON salva una mano da OnGrab, per non rompere il Grip Cancel già funzionante.
+    gripReiatsuOnlyEnabled = true,
+    gripReiatsuOnlyActive = false,
+    gripReiatsuOnlyWasPressed = false,
+    gripReiatsuOnlySchedId = nil,
+    gripReiatsuOnlyDebug = false,
+    gripReiatsuOnlyDebugInterval = 0.50,
+    gripReiatsuOnlyNextDebugTime = 0,
+    gripReiatsuRoot = nil,
+
     startedEffects = false,
     startedSpikes = false,
     retractedSpikes = false,
@@ -525,6 +537,10 @@ function spellFireBall:FindKurohitsugiObjects()
 
     if self.reiatsuVisualRoot == nil then
         self.reiatsuVisualRoot = self.trans:Find("ReiatsuVisualRoot")
+    end
+
+    if self.gripReiatsuRoot == nil then
+        self.gripReiatsuRoot = self.trans:Find("GripReiatsuRoot")
     end
 
     if self.castRoot == nil then
@@ -955,6 +971,49 @@ function spellFireBall:HideReiatsuVisual()
     print("KUROHITSUGI TEST - Reiatsu visual hidden")
 end
 
+function spellFireBall:UpdateGripReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    if self.gripReiatsuRoot == nil then return end
+
+    local pt = self:GetPlayerTrans()
+
+    if pt ~= nil then
+        local pos = pt.position
+        pos.y = 0.05
+        self.gripReiatsuRoot.position = pos
+        self.gripReiatsuRoot.rotation = UE.Quaternion.identity
+    else
+        self.gripReiatsuRoot.position = self.trans.position
+        self.gripReiatsuRoot.rotation = UE.Quaternion.identity
+    end
+end
+
+function spellFireBall:ShowGripReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    if self.gripReiatsuRoot == nil then
+        print("KUROHITSUGI WARNING - GripReiatsuRoot nil")
+        return
+    end
+
+    self:UpdateGripReiatsuVisual()
+
+    SetActive(self.gripReiatsuRoot, true)
+    PlayParticleSystemsInRoot(self.gripReiatsuRoot)
+
+    print("KUROHITSUGI TEST - Grip Reiatsu visual shown")
+end
+
+function spellFireBall:HideGripReiatsuVisual()
+    self:FindKurohitsugiObjects()
+
+    StopParticleSystemsInRoot(self.gripReiatsuRoot)
+    SetActive(self.gripReiatsuRoot, false)
+
+    print("KUROHITSUGI TEST - Grip Reiatsu visual hidden")
+end
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     SetActive(self.palmPreviewRoot, true)
@@ -1304,6 +1363,23 @@ function spellFireBall:IsPrimaryGripPressed()
     return self:GetHandButtonPressed(hand, CL.VRTKInputButton.ButtonType.Grip)
 end
 
+function spellFireBall:IsPrimaryTriggerPressed()
+    local hand = self:GetPrimaryHandForKurohitsugiInput()
+    return self:GetHandButtonPressed(hand, CL.VRTKInputButton.ButtonType.Trigger)
+end
+
+function spellFireBall:OnGrab(a, g)
+    -- Avvia solo il watcher del Grip-only.
+    -- Non salviamo a.attachedHand: nella versione precedente poteva far leggere la mano sbagliata
+    -- e rompere il Grip Cancel già verificato.
+    self:StartGripReiatsuOnlyWatcher()
+end
+
+function spellFireBall:OnUnGrab(a, g)
+    self:StopGripReiatsuOnly()
+    self:StopGripReiatsuOnlyWatcher()
+end
+
 function spellFireBall:PrintGripCancelDebug(gripPressed)
     if not self.gripCancelDebug then return end
 
@@ -1364,6 +1440,123 @@ function spellFireBall:UpdateGripCancelDuringCharge()
     end
 
     self.gripCancelWasPressed = gripPressed
+end
+
+function spellFireBall:PrintGripReiatsuOnlyDebug(gripPressed, triggerPressed)
+    if not self.gripReiatsuOnlyDebug then return end
+
+    local now = UE.Time.time
+    if self.gripReiatsuOnlyNextDebugTime ~= nil and now < self.gripReiatsuOnlyNextDebugTime then return end
+    self.gripReiatsuOnlyNextDebugTime = now + (self.gripReiatsuOnlyDebugInterval or 0.50)
+
+    local hand, source = self:GetPrimaryHandForKurohitsugiInput()
+    local handName = "nil"
+
+    pcall(function()
+        if hand ~= nil and hand.name ~= nil then
+            handName = tostring(hand.name)
+        elseif hand ~= nil and hand.transform ~= nil and hand.transform.name ~= nil then
+            handName = tostring(hand.transform.name)
+        end
+    end)
+
+    print("KUROHITSUGI GRIP REIATSU DEBUG - source=" .. tostring(source)
+        .. " hand=" .. tostring(handName)
+        .. " grip=" .. tostring(gripPressed)
+        .. " trigger=" .. tostring(triggerPressed)
+        .. " wasGrip=" .. tostring(self.gripReiatsuOnlyWasPressed)
+        .. " active=" .. tostring(self.gripReiatsuOnlyActive)
+        .. " sequence=" .. tostring(self.isSequenceRunning))
+end
+
+function spellFireBall:StartGripReiatsuOnly()
+    if not self.gripReiatsuOnlyEnabled then return end
+    if self.gripReiatsuOnlyActive then return end
+    if self.isSequenceRunning then return end
+    if self.updateSchedId ~= nil then return end
+
+    self.gripReiatsuOnlyActive = true
+
+    self:FindKurohitsugiObjects()
+    self:HideKurohitsugiPreviewAll()
+    self:ShowGripReiatsuVisual()
+    self:StartChargeReiatsuBind()
+
+    print("KUROHITSUGI TEST - Grip Reiatsu Only started")
+end
+
+function spellFireBall:StopGripReiatsuOnly()
+    if not self.gripReiatsuOnlyActive then return end
+
+    self.gripReiatsuOnlyActive = false
+    self:StopChargeReiatsuBind()
+    self:HideGripReiatsuVisual()
+
+    print("KUROHITSUGI TEST - Grip Reiatsu Only stopped")
+end
+
+function spellFireBall:UpdateGripReiatsuOnlyManual()
+    if not self.gripReiatsuOnlyEnabled then return end
+
+    local gripPressed = self:IsPrimaryGripPressed()
+    local triggerPressed = self:IsPrimaryTriggerPressed()
+
+    self:PrintGripReiatsuOnlyDebug(gripPressed, triggerPressed)
+
+    -- Se parte Trigger, preview, o sequenza, la modalità solo Reiatsu si spegne e non interferisce.
+    if triggerPressed or self.isSequenceRunning or self.updateSchedId ~= nil then
+        if self.gripReiatsuOnlyActive then
+            self:StopGripReiatsuOnly()
+        end
+
+        self.gripReiatsuOnlyWasPressed = gripPressed
+        return
+    end
+
+    -- Edge detection: non parte se il Grip era già premuto quando hai preso la gemma.
+    if gripPressed and not self.gripReiatsuOnlyWasPressed then
+        self.gripReiatsuOnlyWasPressed = true
+        self:StartGripReiatsuOnly()
+    elseif not gripPressed then
+        if self.gripReiatsuOnlyActive then
+            self:StopGripReiatsuOnly()
+        end
+
+        self.gripReiatsuOnlyWasPressed = false
+    else
+        self.gripReiatsuOnlyWasPressed = gripPressed
+    end
+
+    if self.gripReiatsuOnlyActive then
+        self:UpdateChargeReiatsuBind()
+        self:UpdateGripReiatsuVisual()
+    end
+end
+
+function spellFireBall:StartGripReiatsuOnlyWatcher()
+    if not self.gripReiatsuOnlyEnabled then return end
+    if self.gripReiatsuOnlySchedId ~= nil then return end
+
+    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
+    self.gripReiatsuOnlyNextDebugTime = 0
+
+    local owner = self
+    self.gripReiatsuOnlySchedId = CL.Scheduler.Create({},
+        function()
+            if owner ~= nil then
+                owner:UpdateGripReiatsuOnlyManual()
+            end
+        end,
+    0, -1).actionId
+
+    print("KUROHITSUGI TEST - Grip Reiatsu Only watcher started")
+end
+
+function spellFireBall:StopGripReiatsuOnlyWatcher()
+    if self.gripReiatsuOnlySchedId ~= nil then
+        CL.Scheduler.RemoveSchedule(self.gripReiatsuOnlySchedId)
+        self.gripReiatsuOnlySchedId = nil
+    end
 end
 
 function spellFireBall:UpdateKurohitsugiPreviewManual()
@@ -3881,6 +4074,14 @@ function spellFireBall:ResetKurohitsugiCast()
     self.chargeCanceledByGrip = false
     self.gripCancelNextDebugTime = 0
 
+    if self.gripReiatsuOnlyActive then
+        self:StopGripReiatsuOnly()
+    else
+        self:HideGripReiatsuVisual()
+    end
+    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
+    self.gripReiatsuOnlyNextDebugTime = 0
+
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
     self.kurohitsugiRainLastPulseTime = -999
@@ -3938,6 +4139,10 @@ function spellFireBall:CastKurohitsugiAtTarget()
 end
 
 function spellFireBall:OnChargeBegin()
+    if self.gripReiatsuOnlyActive then
+        self:StopGripReiatsuOnly()
+    end
+
     -- Se il Kurohitsugi è già attivo, non apriamo nemmeno il preview.
     -- Questo impedisce che un nuovo cast resetti la sequenza precedente.
     if self.isSequenceRunning then
@@ -3980,7 +4185,9 @@ function spellFireBall:OnChargeRelease()
         self:StopChargeReiatsuBind()
         self:HideReiatsuVisual()
         self:HideKurohitsugiPreviewAll()
+        self:HideGripReiatsuVisual()
         self.gripCancelWasPressed = false
+        self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
         print("KUROHITSUGI TEST - release ignored after grip cancel")
         return
     end
@@ -4019,8 +4226,10 @@ function spellFireBall:OnChargeCancel()
 
     self:StopChargeReiatsuBind()
     self:HideReiatsuVisual()
+    self:HideGripReiatsuVisual()
     self.gripCancelWasPressed = false
     self.chargeCanceledByGrip = false
+    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
 
     if self.isSequenceRunning then
         return
