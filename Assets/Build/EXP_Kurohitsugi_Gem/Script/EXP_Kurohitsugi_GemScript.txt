@@ -265,6 +265,18 @@ local spellFireBall = {
     -- Evita che cadaveri/ragdoll già morti vengano ripresi dalla pressione e volino in assenza di gravità.
     chargeReiatsuSkipLikelyDead = true,
 
+    -- Grip cancel: mentre il trigger sta caricando il Kurohitsugi,
+    -- una nuova pressione del grip annulla preview, target area e Reiatsu senza castare.
+    gripCancelEnabled = true,
+    gripCancelWasPressed = false,
+    chargeCanceledByGrip = false,
+
+    -- Debug input grip: serve a capire se la gemma riesce davvero a leggere il Grip
+    -- della mano che la impugna. Disattivalo dopo il test.
+    gripCancelDebug = false,
+    gripCancelDebugInterval = 0.35,
+    gripCancelNextDebugTime = 0,
+
     startedEffects = false,
     startedSpikes = false,
     retractedSpikes = false,
@@ -1202,8 +1214,163 @@ function spellFireBall:InitTargetPosition()
     end
 end
 
+function spellFireBall:GetClosestPlayerHandForKurohitsugiInput()
+    local player = nil
+    pcall(function()
+        player = CL.InteractCharacter.PlayerInstance
+    end)
+
+    if player == nil or player.hands == nil then return nil, "playerHandsNil" end
+
+    local bestHand = nil
+    local bestDist = 999999
+
+    for i = 0, 1 do
+        local h = nil
+        pcall(function()
+            h = player.hands[i]
+        end)
+
+        if h ~= nil and h.transform ~= nil and self.trans ~= nil then
+            local d = 999999
+            pcall(function()
+                d = UE.Vector3.Distance(h.transform.position, self.trans.position)
+            end)
+
+            if d < bestDist then
+                bestDist = d
+                bestHand = h
+            end
+        end
+    end
+
+    if bestHand ~= nil then
+        return bestHand, "closestPlayerHand"
+    end
+
+    return nil, "closestPlayerHandNil"
+end
+
+function spellFireBall:GetPrimaryHandForKurohitsugiInput()
+    local hand = nil
+    local source = "nil"
+
+    pcall(function()
+        if self.interact ~= nil and self.interact.GetPrimaryHand ~= nil then
+            hand = self.interact:GetPrimaryHand()
+            if hand ~= nil then source = "self.interact:GetPrimaryHand" end
+        end
+    end)
+
+    pcall(function()
+        if hand == nil and self.host ~= nil and self.host.interact ~= nil and self.host.interact.GetPrimaryHand ~= nil then
+            hand = self.host.interact:GetPrimaryHand()
+            if hand ~= nil then source = "self.host.interact:GetPrimaryHand" end
+        end
+    end)
+
+    -- Fallback ispirato agli script gesture/Roaring: se il sistema non espone la PrimaryHand
+    -- dalla gemma, leggiamo la mano del player più vicina alla gemma.
+    if hand == nil then
+        local fallbackHand, fallbackSource = self:GetClosestPlayerHandForKurohitsugiInput()
+        hand = fallbackHand
+        source = fallbackSource
+    end
+
+    return hand, source
+end
+
+function spellFireBall:GetHandButtonPressed(hand, buttonType)
+    if hand == nil then return false end
+    if buttonType == nil then return false end
+
+    local pressed = false
+
+    pcall(function()
+        if hand.inputs ~= nil then
+            local input = hand.inputs[buttonType]
+            if input ~= nil then
+                pressed = input.IsPressed
+            end
+        end
+    end)
+
+    if pressed == nil then pressed = false end
+    return pressed
+end
+
+function spellFireBall:IsPrimaryGripPressed()
+    local hand = self:GetPrimaryHandForKurohitsugiInput()
+    return self:GetHandButtonPressed(hand, CL.VRTKInputButton.ButtonType.Grip)
+end
+
+function spellFireBall:PrintGripCancelDebug(gripPressed)
+    if not self.gripCancelDebug then return end
+
+    local now = UE.Time.time
+    if self.gripCancelNextDebugTime ~= nil and now < self.gripCancelNextDebugTime then return end
+    self.gripCancelNextDebugTime = now + (self.gripCancelDebugInterval or 0.35)
+
+    local hand, source = self:GetPrimaryHandForKurohitsugiInput()
+    local triggerPressed = self:GetHandButtonPressed(hand, CL.VRTKInputButton.ButtonType.Trigger)
+    local handName = "nil"
+
+    pcall(function()
+        if hand ~= nil and hand.name ~= nil then
+            handName = tostring(hand.name)
+        elseif hand ~= nil and hand.transform ~= nil and hand.transform.name ~= nil then
+            handName = tostring(hand.transform.name)
+        end
+    end)
+
+    print("KUROHITSUGI GRIP DEBUG - source=" .. tostring(source)
+        .. " hand=" .. tostring(handName)
+        .. " grip=" .. tostring(gripPressed)
+        .. " trigger=" .. tostring(triggerPressed)
+        .. " wasGrip=" .. tostring(self.gripCancelWasPressed)
+        .. " cancelled=" .. tostring(self.chargeCanceledByGrip))
+end
+
+function spellFireBall:CancelKurohitsugiChargeByGrip()
+    if self.chargeCanceledByGrip then return end
+
+    self.chargeCanceledByGrip = true
+
+    pcall(function()
+        self:SetHandPose(false)
+    end)
+
+    self:StopChargeReiatsuBind()
+    self:HideReiatsuVisual()
+    self:HideKurohitsugiPreviewAll()
+
+    print("KUROHITSUGI TEST - Charge cancelled by grip")
+end
+
+function spellFireBall:UpdateGripCancelDuringCharge()
+    if not self.gripCancelEnabled then return end
+    if self.isSequenceRunning then return end
+    if self.chargeCanceledByGrip then return end
+
+    local gripPressed = self:IsPrimaryGripPressed()
+    self:PrintGripCancelDebug(gripPressed)
+
+    -- Edge detection: se il grip era già premuto quando è iniziato il charge,
+    -- non cancelliamo subito. Serve una nuova pressione durante il charge.
+    if gripPressed and not self.gripCancelWasPressed then
+        self.gripCancelWasPressed = true
+        self:CancelKurohitsugiChargeByGrip()
+        return
+    end
+
+    self.gripCancelWasPressed = gripPressed
+end
+
 function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:FindKurohitsugiObjects()
+
+    self:UpdateGripCancelDuringCharge()
+    if self.chargeCanceledByGrip then return end
 
     self:UpdateChargeReiatsuBind()
     self:UpdateReiatsuVisual()
@@ -3710,6 +3877,9 @@ function spellFireBall:ResetKurohitsugiCast()
     self.gravityFinalSlamDone = false
 
     self:StopChargeReiatsuBind()
+    self.gripCancelWasPressed = false
+    self.chargeCanceledByGrip = false
+    self.gripCancelNextDebugTime = 0
 
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
@@ -3784,6 +3954,15 @@ function spellFireBall:OnChargeBegin()
 
     self:ResetKurohitsugiCast()
 
+    -- Non cancellare subito se il grip è già premuto per via della presa della gemma:
+    -- il cancel richiede una nuova pressione durante il charge.
+    self.chargeCanceledByGrip = false
+    self.gripCancelWasPressed = self:IsPrimaryGripPressed()
+    self.gripCancelNextDebugTime = 0
+    if self.gripCancelDebug then
+        print("KUROHITSUGI GRIP DEBUG - OnChargeBegin initialGrip=" .. tostring(self.gripCancelWasPressed))
+    end
+
     self:ShowKurohitsugiPreview()
     self:InitTargetPosition()
     self:ShowReiatsuVisual()
@@ -3796,6 +3975,15 @@ function spellFireBall:OnChargeRelease()
     pcall(function()
         self:SetHandPose(false)
     end)
+
+    if self.chargeCanceledByGrip then
+        self:StopChargeReiatsuBind()
+        self:HideReiatsuVisual()
+        self:HideKurohitsugiPreviewAll()
+        self.gripCancelWasPressed = false
+        print("KUROHITSUGI TEST - release ignored after grip cancel")
+        return
+    end
 
     -- Non fermiamo subito la Reiatsu Bind:
     -- deve continuare nei primi istanti della sequenza, insieme al SequenceReiatsuRoot.
@@ -3831,6 +4019,8 @@ function spellFireBall:OnChargeCancel()
 
     self:StopChargeReiatsuBind()
     self:HideReiatsuVisual()
+    self.gripCancelWasPressed = false
+    self.chargeCanceledByGrip = false
 
     if self.isSequenceRunning then
         return
