@@ -18,6 +18,7 @@ local spellFireBall = {
     breakPiecesRoot = nil,
     innerDarknessRoot = nil,
     glowTransitionRoot = nil,
+    sequenceReiatsuRoot = nil,
 
     previewCube = nil,
     targetArea = nil,
@@ -271,6 +272,8 @@ local spellFireBall = {
     startedInnerDarkness = false,
     startedGlowTransition = false,
     stoppedGlowTransition = false,
+    startedSequenceReiatsu = false,
+    stoppedSequenceReiatsu = false,
     startedFirstRainPulse = false,
     startedSecondRainPulse = false,
 
@@ -554,6 +557,10 @@ function spellFireBall:FindKurohitsugiObjects()
 
     if self.glowTransitionRoot == nil and self.sequenceRoot ~= nil then
         self.glowTransitionRoot = self.sequenceRoot:Find("GlowTransitionRoot")
+    end
+
+    if self.sequenceReiatsuRoot == nil and self.sequenceRoot ~= nil then
+        self.sequenceReiatsuRoot = self.sequenceRoot:Find("SequenceReiatsuRoot")
     end
 
     if self.previewCube == nil and self.palmPreviewRoot ~= nil then
@@ -1269,6 +1276,10 @@ function spellFireBall:ResetSequenceFlags()
     self.startedInnerDarkness = false
     self.startedGlowTransition = false
     self.stoppedGlowTransition = false
+    self.startedSequenceReiatsu = false
+    self.stoppedSequenceReiatsu = false
+    self.startedSequenceReiatsu = false
+    self.stoppedSequenceReiatsu = false
     self.startedFirstRainPulse = false
     self.startedSecondRainPulse = false
 
@@ -1279,9 +1290,10 @@ function spellFireBall:ResetSequenceFlags()
     self.gravityFinalSlamDone = false
     self.spikeGroundShockWaveSpawned = false
 
-    self.chargeReiatsuActive = false
-    self.chargeReiatsuLastTick = 0
-    self.chargeReiatsuLastKnockoutTime = -999
+    -- Non resettiamo chargeReiatsuActive qui:
+    -- dopo il release deve poter continuare per i primi istanti della sequenza,
+    -- fino alla fine delle linee / inizio pareti.
+    -- Lo stop reale avviene in StopSequenceReiatsuContinuity() o HideKurohitsugiCastAll().
 
     self.kurohitsugiSlashLastPulseTime = -999
     self.kurohitsugiSlashStarted = false
@@ -1311,6 +1323,9 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     SetActive(self.innerDarknessRoot, false)
     StopParticleSystemsInRoot(self.glowTransitionRoot)
     SetActive(self.glowTransitionRoot, false)
+
+    StopParticleSystemsInRoot(self.sequenceReiatsuRoot)
+    SetActive(self.sequenceReiatsuRoot, false)
 
     if self.spikesRoot ~= nil then
         self.spikesRoot.gameObject:SetActive(true)
@@ -1397,6 +1412,9 @@ function spellFireBall:HideKurohitsugiCastAll()
     SetActive(self.innerDarknessRoot, false)
     StopParticleSystemsInRoot(self.glowTransitionRoot)
     SetActive(self.glowTransitionRoot, false)
+
+    StopParticleSystemsInRoot(self.sequenceReiatsuRoot)
+    SetActive(self.sequenceReiatsuRoot, false)
 
     if self.spikesRoot ~= nil then
         SetChildrenActive(self.spikesRoot, false)
@@ -3427,6 +3445,65 @@ function spellFireBall:UpdateKurohitsugiFlyRain()
 end
 
 
+
+-- =========================================================
+-- KUROHITSUGI SEQUENCE REIATSU CONTINUITY
+-- =========================================================
+
+function spellFireBall:StartSequenceReiatsuContinuity()
+    if self.startedSequenceReiatsu then return end
+
+    self:FindKurohitsugiObjects()
+
+    self.startedSequenceReiatsu = true
+    self.stoppedSequenceReiatsu = false
+
+    if self.sequenceReiatsuRoot ~= nil then
+        SetActive(self.sequenceReiatsuRoot, true)
+        PlayParticleSystemsInRoot(self.sequenceReiatsuRoot)
+        print("KUROHITSUGI TEST - Sequence Reiatsu continuity started")
+    else
+        print("KUROHITSUGI WARNING - SequenceReiatsuRoot nil")
+    end
+
+    -- Continuità anche sugli effetti sui nemici:
+    -- la Charge Reiatsu Bind non viene fermata al release, ma viene aggiornata
+    -- durante la sequenza fino alla comparsa delle spike/glow.
+    if self.chargeReiatsuActive then
+        self.chargeReiatsuLastTick = -999
+        self:ApplyChargeReiatsuTick()
+    end
+end
+
+function spellFireBall:StopSequenceReiatsuContinuity()
+    if self.stoppedSequenceReiatsu then return end
+
+    self.stoppedSequenceReiatsu = true
+
+    StopParticleSystemsInRoot(self.sequenceReiatsuRoot)
+    SetActive(self.sequenceReiatsuRoot, false)
+
+    self:StopChargeReiatsuBind()
+
+    print("KUROHITSUGI TEST - Sequence Reiatsu continuity stopped")
+end
+
+function spellFireBall:UpdateSequenceReiatsuContinuity()
+    if not self.startedSequenceReiatsu then return end
+    if self.stoppedSequenceReiatsu then return end
+
+    -- La continuità dura dall'inizio della sequenza fino alla comparsa delle spike/glow.
+    -- Così la pressione spirituale accompagna linee, pareti, top e prima chiusura,
+    -- poi lascia spazio alla fase offensiva vera: glow, seconda rain, spike e frantumazione.
+    if self.sequenceTimer >= self.spikesTime then
+        self:StopSequenceReiatsuContinuity()
+        return
+    end
+
+    self:UpdateChargeReiatsuBind()
+end
+
+
 function spellFireBall:StartGlowTransition()
     if self.glowTransitionRoot == nil then return end
     if self.startedGlowTransition then return end
@@ -3495,6 +3572,8 @@ function spellFireBall:UpdateKurohitsugiSequence()
     self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
 
     self:LockCastTransform()
+
+    self:UpdateSequenceReiatsuContinuity()
 
     self:AnimateLines()
 
@@ -3604,6 +3683,7 @@ function spellFireBall:StartKurohitsugiSequence()
 
     self:StopKurohitsugiSequence()
     self:SetKurohitsugiInitialVisualState()
+    self:StartSequenceReiatsuContinuity()
 
     local owner = self
 
@@ -3717,7 +3797,8 @@ function spellFireBall:OnChargeRelease()
         self:SetHandPose(false)
     end)
 
-    self:StopChargeReiatsuBind()
+    -- Non fermiamo subito la Reiatsu Bind:
+    -- deve continuare nei primi istanti della sequenza, insieme al SequenceReiatsuRoot.
     self:HideReiatsuVisual()
 
     -- Se durante una sequenza attiva arriva un release, lo ignoriamo.
@@ -3725,6 +3806,7 @@ function spellFireBall:OnChargeRelease()
     if self.isSequenceRunning then
         self.pendingCastBlocked = true
         self:HideKurohitsugiPreviewAll()
+        self:StopChargeReiatsuBind()
         print("KUROHITSUGI BLOCKED - release ignored while sequence is running")
         return
     end
@@ -3736,6 +3818,8 @@ function spellFireBall:OnChargeRelease()
     if castPos ~= nil then
         self.lastTargetPos = castPos
         self:CastKurohitsugiAtTarget()
+    else
+        self:StopChargeReiatsuBind()
     end
 end
 
