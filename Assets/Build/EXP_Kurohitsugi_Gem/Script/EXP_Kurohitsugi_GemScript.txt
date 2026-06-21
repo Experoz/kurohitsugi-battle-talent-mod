@@ -217,9 +217,9 @@ local spellFireBall = {
 
     -- V1.5: manteniamo la pressione fisica della V1, ma la riduciamo per evitare vibrazione eccessiva.
     -- Aggiungiamo anche DoStiff ispirato alla Telekinesis, senza usare joint ad area.
-    chargeReiatsuDownForce = 16,
+    chargeReiatsuDownForce = 0,
     chargeReiatsuVelocityDamping = 0.35,
-    chargeReiatsuGravityOffTime = 0.18,
+    chargeReiatsuGravityOffTime = 0,
     chargeReiatsuKnockout = false,
     chargeReiatsuAngularDamping = 0.50,
     chargeReiatsuUseStiff = true,
@@ -227,10 +227,42 @@ local spellFireBall = {
 
     -- V2.1: interrupt stile Telecinesi, ma SOLO sui logic target.
     -- Non usa Character Sweep e non prosegue dopo il release, così non dovrebbe rompere il cast.
-    chargeReiatsuKnockoutInterval = 0.30,
+    -- V3.7: pulse ancora più rapido per rendere la pressione/vibrazione più continua.
+    -- La forza viene abbassata leggermente per evitare lo scatto verticale troppo visibile.
+    chargeReiatsuKnockoutInterval = 0.05,
     chargeReiatsuLastKnockoutTime = -999,
     chargeReiatsuUseDoThrowing = true,
     chargeReiatsuUseRootInterrupt = true,
+
+    -- V3: pressione spirituale più "role-based".
+    -- Usa la stessa filosofia della shockwave funzionante: risaliamo al Role Target
+    -- e applichiamo reazioni muscolari/AI, non solo forza fisica su collider casuali.
+    chargeReiatsuForceRoleTarget = true,
+    chargeReiatsuUseDizzy = true,
+    chargeReiatsuDizzyDuration = 0.45,
+    chargeReiatsuStopAction = true,
+    chargeReiatsuProtectMotion = true,
+    chargeReiatsuProtectTime = 0.45,
+    -- Spento in V3.6: DoThrowing troppo frequente può far scattare/laggare i ragdoll.
+    -- Il blocco reale lo fanno già Dizzy + Stiff + StopAction.
+    chargeReiatsuUseThrowingPulse = false,
+
+    -- V3.7: pressione più rapida ma un pelo meno forte.
+    -- Obiettivo: tremore continuo, meno "scatto" visibile verso il basso.
+    chargeReiatsuSlamSmallEnemies = true,
+    chargeReiatsuSmallEnemyDownForce = 5,
+    chargeReiatsuMaxDownVelocity = -1.35,
+    chargeReiatsuRootForceMultiplier = 0.0,
+
+    -- V3.7 Hips Pressure: proviamo a premere Hips/Pelvis prima del torace.
+    -- L'idea è capire se il punto bacino dà una postura più credibile e meno effetto braccia.
+    chargeReiatsuUseChestPressure = true,
+    chargeReiatsuChestForceMultiplier = 1.0,
+    chargeReiatsuChestVelocityDamping = 0.55,
+    chargeReiatsuPressureDebug = true,
+
+    -- Evita che cadaveri/ragdoll già morti vengano ripresi dalla pressione e volino in assenza di gravità.
+    chargeReiatsuSkipLikelyDead = true,
 
     startedEffects = false,
     startedSpikes = false,
@@ -1942,51 +1974,379 @@ function spellFireBall:StopChargeReiatsuBind()
     print("KUROHITSUGI TEST - Charge Reiatsu bind stopped")
 end
 
-function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
-    if pu == nil then return end
-    if center == nil then return end
-    if not self:IsValidGravityTarget(pu) then return end
+function spellFireBall:IsChargeReiatsuLikelyDead(pu)
+    if pu == nil then return false end
+    if not self.chargeReiatsuSkipLikelyDead then return false end
 
-    local puPos = self:GetPhysicsUnitPosition(pu)
-    if puPos == nil then return end
+    local dead = false
 
-    -- V1.5: Reiatsu attorno al player, senza pull verso il player.
-    -- Mantiene la pressione fisica della V1, ma meno violenta.
-    -- In più prova DoStiff come la Telekinesis, per dare l'effetto "imbambolato" senza creare joint AoE.
-    local force = UE.Vector3.down * self.chargeReiatsuDownForce
-
+    -- Nomi/proprietà diverse tra role, controller e ragdoll: proviamo più strade in pcall.
     pcall(function()
-        if self.chargeReiatsuUseStiff and pu.unitType == CL.Tagger.Tag.InteractRole then
-            if pu.muscleState ~= nil then
-                pu.muscleState:DoStiff(self.chargeReiatsuStiffDuration)
-            end
+        if pu.isDead ~= nil and pu.isDead == true then
+            dead = true
         end
     end)
 
     pcall(function()
-        pu:DisableGravityAWhile(self.chargeReiatsuGravityOffTime)
+        if not dead and pu.dead ~= nil and pu.dead == true then
+            dead = true
+        end
     end)
 
     pcall(function()
-        pu:SetKinematic(false)
+        if not dead and pu.IsDead ~= nil and pu:IsDead() then
+            dead = true
+        end
     end)
 
     pcall(function()
-        pu:AddForce(force)
+        if not dead and pu.actor ~= nil and pu.actor.IsDead ~= nil and pu.actor:IsDead() then
+            dead = true
+        end
     end)
 
-    local rb = self:GetPhysicsUnitRigidbody(pu)
+    pcall(function()
+        if not dead and pu.motion ~= nil and pu.motion.IsDead ~= nil and pu.motion:IsDead() then
+            dead = true
+        end
+    end)
+
+    -- Filtro prudente: se non espone più né actor né motion né controller, ma resta solo un corpo fisico,
+    -- lo trattiamo come ragdoll/cadavere e non gli applichiamo più Reiatsu.
+    pcall(function()
+        if not dead and pu.actor == nil and pu.motion == nil and pu.controller == nil and pu.rb ~= nil then
+            dead = true
+        end
+    end)
+
+    return dead
+end
+
+
+function spellFireBall:FindChildTransformByNameRecursive(root, wantedNames)
+    if root == nil then return nil end
+    if wantedNames == nil then return nil end
+
+    local rootName = ""
+
+    pcall(function()
+        if root.name ~= nil then
+            rootName = string.lower(tostring(root.name))
+        end
+    end)
+
+    for i = 1, #wantedNames do
+        local wanted = wantedNames[i]
+        if wanted ~= nil and rootName == string.lower(wanted) then
+            return root
+        end
+    end
+
+    local childCount = 0
+
+    pcall(function()
+        childCount = root.childCount
+    end)
+
+    if childCount == nil then childCount = 0 end
+
+    for i = 0, childCount - 1 do
+        local child = nil
+
+        pcall(function()
+            child = root:GetChild(i)
+        end)
+
+        local found = self:FindChildTransformByNameRecursive(child, wantedNames)
+        if found ~= nil then
+            return found
+        end
+    end
+
+    return nil
+end
+
+function spellFireBall:GetChargeReiatsuChestTransform(target)
+    if target == nil then return nil end
+
+    local rootTr = self:GetPhysicsUnitTransform(target)
+    if rootTr == nil then return nil end
+
+    -- V3.7: priorità al bacino.
+    -- Teniamo il nome della funzione per non toccare il resto dello script,
+    -- ma ora il punto cercato è Hips/Pelvis prima di Chest/Spine.
+    local exact = self:FindChildTransformByNameRecursive(rootTr, {
+        "Hips",
+        "Pelvis",
+        "Bip001 Pelvis",
+        "Bip001 Hips",
+        "mixamorig:Hips",
+        "mixamorig:Pelvis",
+        "Spine",
+        "Chest",
+        "UpperChest"
+    })
+
+    if exact ~= nil then
+        pcall(function()
+            if self.chargeReiatsuPressureDebug then
+                print("KUROHITSUGI HIPS DEBUG - exact pressure transform found=" .. tostring(exact.name))
+            end
+        end)
+        return exact
+    end
+
+    -- Fallback elastico: alcuni prefab possono avere nomi composti tipo "GoblinSmall_Hips".
+    local found = nil
+
+    local function scanContains(tr)
+        if tr == nil or found ~= nil then return end
+
+        local n = ""
+        pcall(function()
+            if tr.name ~= nil then
+                n = string.lower(tostring(tr.name))
+            end
+        end)
+
+        if string.find(n, "hips") ~= nil or string.find(n, "pelvis") ~= nil then
+            found = tr
+            return
+        end
+
+        -- Fallback secondario: se proprio non trova bacino, prova spine/chest.
+        if string.find(n, "spine") ~= nil or string.find(n, "chest") ~= nil then
+            found = tr
+            return
+        end
+
+        local count = 0
+        pcall(function()
+            count = tr.childCount
+        end)
+        if count == nil then count = 0 end
+
+        for i = 0, count - 1 do
+            local child = nil
+            pcall(function()
+                child = tr:GetChild(i)
+            end)
+            scanContains(child)
+            if found ~= nil then return end
+        end
+    end
+
+    scanContains(rootTr)
+
+    pcall(function()
+        if self.chargeReiatsuPressureDebug then
+            if found ~= nil then
+                print("KUROHITSUGI HIPS DEBUG - contains pressure transform found=" .. tostring(found.name))
+            else
+                print("KUROHITSUGI HIPS DEBUG - no Hips/Pelvis/Spine/Chest transform found on target=" .. tostring(self:GetSafeName(target)))
+            end
+        end
+    end)
+
+    return found
+end
+
+function spellFireBall:GetRigidbodyFromTransform(tr)
+    if tr == nil then return nil end
+
+    local rb = nil
+
+    pcall(function()
+        rb = tr:GetComponent(typeof(UE.Rigidbody))
+    end)
+
+    if rb ~= nil then return rb end
+
+    pcall(function()
+        rb = tr:GetComponentInChildren(typeof(UE.Rigidbody))
+    end)
+
+    return rb
+end
+
+function spellFireBall:ApplyChargeReiatsuChestPressure(target, force)
+    if target == nil then return false end
+    if force == nil then return false end
+    if not self.chargeReiatsuUseChestPressure then return false end
+
+    local chestTr = self:GetChargeReiatsuChestTransform(target)
+    if chestTr == nil then return false end
+
+    local rb = self:GetRigidbodyFromTransform(chestTr)
+    if rb == nil then
+        pcall(function()
+            if self.chargeReiatsuPressureDebug then
+                print("KUROHITSUGI HIPS DEBUG - pressure transform found but rb nil transform=" .. tostring(chestTr.name))
+            end
+        end)
+        return false
+    end
+
+    pcall(function()
+        if self.chargeReiatsuPressureDebug then
+            print("KUROHITSUGI HIPS DEBUG - pressure rb applied transform=" .. tostring(chestTr.name) .. " force=" .. tostring(force))
+        end
+    end)
+
+    local applied = false
+    local mul = self.chargeReiatsuChestForceMultiplier or 1.0
+
+    pcall(function()
+        rb.isKinematic = false
+        rb:AddForce(force * mul, UE.ForceMode.Impulse)
+        applied = true
+    end)
+
+    pcall(function()
+        local v = rb.velocity
+        if v ~= nil then
+            local maxDown = self.chargeReiatsuMaxDownVelocity or -1.35
+            local newY = v.y
+
+            if newY < maxDown then
+                newY = maxDown
+            end
+
+            local damping = self.chargeReiatsuChestVelocityDamping or self.chargeReiatsuVelocityDamping or 0.55
+
+            rb.velocity = UE.Vector3(
+                v.x * damping,
+                newY,
+                v.z * damping
+            )
+        end
+    end)
+
+    return applied
+end
+
+function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
+    if pu == nil then return end
+    if center == nil then return end
+
+    -- V3.6: stessa filosofia della V3 originale, ma senza slam continuo.
+    -- Risaliamo al Role Target come per la shockwave, ma NON usiamo IsValidGravityTarget().
+    local target = pu
+
+    if self.chargeReiatsuForceRoleTarget then
+        local roleTarget = self:GetSpikeShockWaveRoleTarget(pu)
+        if roleTarget ~= nil then
+            target = roleTarget
+        end
+    end
+
+    if target == nil then return end
+
+    -- Evita player/gemma/mani, ma lascia passare i nemici validi.
+    if not self:IsSpikeShockWaveValidTarget(target) then return end
+
+    -- Nuovo filtro: non riattivare cadaveri/ragdoll già morti.
+    if self:IsChargeReiatsuLikelyDead(target) then return end
+
+    local puPos = self:GetPhysicsUnitPosition(target)
+    if puPos == nil then return end
+
+    -- V3.6: pressione fisica a micro-pulse ravvicinati.
+    -- Non è forza continua ogni tick: è un impulso piccolo ma frequente,
+    -- così il tremore sembra costante senza accumulare caduta infinita.
+    local downForce = self.chargeReiatsuSmallEnemyDownForce or 4
+    local force = UE.Vector3.down * downForce
+
+    -- 1) Reazione muscolare: blocca postura/attacchi.
+    pcall(function()
+        if self.chargeReiatsuUseStiff and target.muscleState ~= nil then
+            target.muscleState:DoStiff(self.chargeReiatsuStiffDuration)
+        end
+    end)
+
+    -- 2) Dizzy: è la parte che hai confermato funzionare bene.
+    pcall(function()
+        if self.chargeReiatsuUseDizzy and target.muscleState ~= nil then
+            target.muscleState:EnterDizzy(self.chargeReiatsuDizzyDuration)
+        end
+    end)
+
+    -- 3) Stop dell'azione corrente: impedisce ai nemici di proseguire attacchi/movimenti.
+    pcall(function()
+        if self.chargeReiatsuStopAction and target.actor ~= nil then
+            target.actor:StopAction(false)
+        end
+    end)
+
+    -- 4) Motion protect/interruption breve, rinnovata a tick.
+    pcall(function()
+        if self.chargeReiatsuProtectMotion and target.motion ~= nil then
+            target.motion:ProtectMotionFunctionForAWhile(self.chargeReiatsuProtectTime)
+        end
+    end)
+
+    -- 5) Pulse throwing come V3, ma solo sui target vivi/validi.
+    if doInterrupt and self.chargeReiatsuUseThrowingPulse then
+        pcall(function()
+            if target.muscleState ~= nil then
+                target.muscleState:DoThrowing()
+            end
+        end)
+    end
+
+    -- 6) Knockout opzionale: resta spento di default.
+    if self.chargeReiatsuKnockout and doInterrupt then
+        pcall(function()
+            if target.motion ~= nil then
+                target.motion:Knockout()
+            end
+        end)
+    end
+
+    -- 7) Pressione fisica: non lasciamo i corpi in assenza di gravità troppo a lungo.
+    pcall(function()
+        if self.chargeReiatsuGravityOffTime ~= nil and self.chargeReiatsuGravityOffTime > 0 then
+            target:DisableGravityAWhile(self.chargeReiatsuGravityOffTime)
+        end
+    end)
+
+    pcall(function()
+        target:SetKinematic(false)
+    end)
+
+    -- Impulso verso il basso SOLO a pulse, non ogni tick.
+    -- doInterrupt è già scandito da chargeReiatsuKnockoutInterval, quindi ora la pressione fisica
+    -- parte circa ogni 0.30s invece che 20 volte al secondo.
+    if doInterrupt and self.chargeReiatsuSlamSmallEnemies then
+        local chestApplied = self:ApplyChargeReiatsuChestPressure(target, force)
+
+        -- Fallback: se non troviamo Hips/Pelvis/Spine/Chest, usiamo il target normale.
+        -- Non applichiamo entrambe le forze, altrimenti torniamo al problema dello sprofondamento.
+        if not chestApplied then
+            pcall(function()
+                target:AddForce(force, UE.ForceMode.Impulse)
+            end)
+        end
+    end
+
+    local rb = self:GetPhysicsUnitRigidbody(target)
 
     pcall(function()
         if rb ~= nil then
-            rb:AddForce(force)
-
+            -- Nessun rb:AddForce continuo: solo damping per frenare avanzamento e oscillazioni.
             local v = rb.velocity
             if v ~= nil then
-                -- Damping morbido: rallenta il movimento senza congelare brutalmente il ragdoll.
+                local maxDown = self.chargeReiatsuMaxDownVelocity or -1.35
+                local newY = v.y
+
+                -- Limite anti-sprofondamento: non lasciamo accumulare caduta artificiale.
+                if newY < maxDown then
+                    newY = maxDown
+                end
+
                 rb.velocity = UE.Vector3(
                     v.x * self.chargeReiatsuVelocityDamping,
-                    v.y * self.chargeReiatsuVelocityDamping,
+                    newY,
                     v.z * self.chargeReiatsuVelocityDamping
                 )
             end
@@ -1997,54 +2357,58 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
         end
     end)
 
-    if self.chargeReiatsuKnockout and doInterrupt then
-        pcall(function()
-            if pu.motion ~= nil then
-                pu.motion:Knockout()
-            end
-        end)
-
-        pcall(function()
-            if self.chargeReiatsuUseDoThrowing and pu.muscleState ~= nil then
-                pu.muscleState:DoThrowing()
-            end
-        end)
-    end
-
-    -- Proviamo anche sul root, ma senza doppio AddForce aggressivo.
-    -- Serve per nemici grandi/complessi che espongono parti fisiche diverse.
+    -- 8) Root fallback: manteniamo gli effetti di controllo, ma niente doppio slam forte sul root.
     pcall(function()
-        if pu.GetRootPu ~= nil then
-            local root = pu:GetRootPu()
+        if target.GetRootPu ~= nil then
+            local root = target:GetRootPu()
 
-            if root ~= nil and root ~= pu and self:IsValidGravityTarget(root) then
-                root:DisableGravityAWhile(self.chargeReiatsuGravityOffTime)
-                root:SetKinematic(false)
+            if root ~= nil and root ~= target and self:IsSpikeShockWaveValidTarget(root) and not self:IsChargeReiatsuLikelyDead(root) then
+                if self.chargeReiatsuUseStiff and root.muscleState ~= nil then
+                    root.muscleState:DoStiff(self.chargeReiatsuStiffDuration)
+                end
+
+                if self.chargeReiatsuUseDizzy and root.muscleState ~= nil then
+                    root.muscleState:EnterDizzy(self.chargeReiatsuDizzyDuration)
+                end
+
+                if self.chargeReiatsuStopAction and root.actor ~= nil then
+                    root.actor:StopAction(false)
+                end
+
+                if self.chargeReiatsuProtectMotion and root.motion ~= nil then
+                    root.motion:ProtectMotionFunctionForAWhile(self.chargeReiatsuProtectTime)
+                end
+
+                if doInterrupt and self.chargeReiatsuUseRootInterrupt and self.chargeReiatsuUseThrowingPulse and root.muscleState ~= nil then
+                    root.muscleState:DoThrowing()
+                end
 
                 local rootRb = self:GetPhysicsUnitRigidbody(root)
+                local rootForceMul = self.chargeReiatsuRootForceMultiplier or 0.0
 
                 if rootRb ~= nil then
+                    if rootForceMul > 0 then
+                        rootRb:AddForce(force * rootForceMul)
+                    end
+
                     local rv = rootRb.velocity
                     if rv ~= nil then
+                        local maxDown = self.chargeReiatsuMaxDownVelocity or -1.35
+                        local rootY = rv.y * self.chargeReiatsuVelocityDamping
+
+                        if rootY < maxDown then
+                            rootY = maxDown
+                        end
+
                         rootRb.velocity = UE.Vector3(
                             rv.x * self.chargeReiatsuVelocityDamping,
-                            rv.y * self.chargeReiatsuVelocityDamping,
+                            rootY,
                             rv.z * self.chargeReiatsuVelocityDamping
                         )
                     end
 
                     if rootRb.angularVelocity ~= nil then
                         rootRb.angularVelocity = rootRb.angularVelocity * self.chargeReiatsuAngularDamping
-                    end
-                end
-
-                if self.chargeReiatsuUseRootInterrupt and self.chargeReiatsuKnockout and doInterrupt then
-                    if root.motion ~= nil then
-                        root.motion:Knockout()
-                    end
-
-                    if self.chargeReiatsuUseDoThrowing and root.muscleState ~= nil then
-                        root.muscleState:DoThrowing()
                     end
                 end
             end
