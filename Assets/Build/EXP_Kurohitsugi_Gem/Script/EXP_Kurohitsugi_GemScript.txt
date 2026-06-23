@@ -98,14 +98,29 @@ local spellFireBall = {
     -- Dopo la seconda scarica lasciamo un attimo di impatto, poi parte la frantumazione.
     -- Dopo glow + seconda scarica lasciamo tempo ai dardi di essere visibili
     -- prima della frantumazione finale.
-    holdAfterSpikes = 0.35,
+    -- V5: teniamo le spike/esplosioni aperte più a lungo.
+    -- Crea quell'attimo di sospensione alla massima espansione prima della rottura finale.
+    holdAfterSpikes = 1.00,
     spikeRetractDuration = 0.12,
 
-    breakPiecesDuration = 0.35,
-    breakPiecesHoldDuration = 0.25,
-    breakPiecesOutwardDistance = 0.75,
-    breakPiecesStartScaleMultiplier = 0.65,
-    breakPiecesEndScaleMultiplier = 1.0,
+    -- Frammentazione finale V6:
+    -- i frammenti mesh si aprono e cadono in world space;
+    -- la sensazione di "svanire nel pavimento" viene data soprattutto dagli Smoke_End_1/2,
+    -- che scendono gradualmente fino a Y locale -4 mentre restano attivi.
+    breakPiecesDuration = 1.82,
+    breakPiecesHoldDuration = 0.18,
+    breakPiecesOutwardDistance = 0.38,
+    breakPiecesScatterDistance = 0.48,
+    breakPiecesFallDistance = 7.10,
+    breakPiecesOpenPhase = 0.22,
+    breakPiecesFallStart = 0.04,
+    breakPiecesStartScaleMultiplier = 1.0,
+    breakPiecesEndScaleMultiplier = 0.82,
+
+    -- Smoke finale: non cambiamo il Particle System, muoviamo solo i transform Smoke_End_1 e Smoke_End_2.
+    breakSmokeEndTargetLocalY = -4.5,
+    breakSmokeEndStartDelay = 0.04,
+    breakSmokeEndDuration = 1.20,
 
     -- Gravity Zone Kurohitsugi
     gravityZoneStarted = false,
@@ -319,6 +334,7 @@ local spellFireBall = {
     topData = nil,
     spikeData = nil,
     breakPieceData = nil,
+    breakSmokeEndData = nil,
 
     -- Kurohitsugi line dissolve material control.
     -- Stessa logica delle pareti, ma con range leggermente più contenuto:
@@ -675,6 +691,339 @@ function spellFireBall:ForceFinalTransforms()
     end
 end
 
+function spellFireBall:IsBreakSideRootName(rawName)
+    if rawName == nil then return false end
+
+    local n = string.lower(tostring(rawName))
+
+    return n == "breakside_front"
+        or n == "breakside_back"
+        or n == "breakside_right"
+        or n == "breakside_left"
+        or n == "breakside_top"
+end
+
+function spellFireBall:GetBreakSideOutwardLocalDirection(rawName)
+    if rawName == nil then
+        return UE.Vector3(0, 0, 1)
+    end
+
+    local n = string.lower(tostring(rawName))
+
+    -- Le pareti laterali sono duplicate/ruotate in Unity.
+    -- In locale, +Z dovrebbe corrispondere alla direzione "fuori" della lastra.
+    if n == "breakside_front"
+        or n == "breakside_back"
+        or n == "breakside_right"
+        or n == "breakside_left" then
+
+        return UE.Vector3(0, 0, 1)
+    end
+
+    -- Il top è ruotato a X=90: partiamo con -Z locale per farlo esplodere verso l'alto.
+    -- Se nel test il top esplode verso il basso, cambia questo in UE.Vector3(0, 0, 1).
+    if n == "breakside_top" then
+        return UE.Vector3(0, 0, -1)
+    end
+
+    return UE.Vector3(0, 0, 1)
+end
+
+function spellFireBall:GetBreakPieceMoveLocalDirection(sideName, localPos)
+    local outward = self:GetBreakSideOutwardLocalDirection(sideName)
+
+    if localPos == nil then
+        return outward
+    end
+
+    -- Piccola variazione laterale: evita che tutti i frammenti vadano fuori in modo identico.
+    -- Usiamo X/Y locali perché i frammenti sono figli della singola faccia BreakSide_*.
+    local scatter = UE.Vector3(localPos.x, localPos.y, 0)
+
+    if scatter.sqrMagnitude > 0.001 then
+        scatter = scatter.normalized * 0.32
+    else
+        scatter = UE.Vector3(0, 0, 0)
+    end
+
+    local dir = outward + scatter
+
+    if dir.sqrMagnitude < 0.001 then
+        return outward
+    end
+
+    return dir.normalized
+end
+
+function spellFireBall:GetBreakSideOutwardWorldDirection(sideName, container)
+    local localDir = self:GetBreakSideOutwardLocalDirection(sideName)
+    local worldDir = localDir
+
+    -- Convertiamo la normale locale della faccia in direzione mondo.
+    -- Così Front/Back/Left/Right aprono verso l'esterno reale del cubo,
+    -- mentre il Top apre leggermente verso l'alto.
+    pcall(function()
+        if container ~= nil then
+            worldDir = container:TransformDirection(localDir)
+        end
+    end)
+
+    if worldDir == nil or worldDir.sqrMagnitude < 0.001 then
+        return UE.Vector3(0, 0, 1)
+    end
+
+    return worldDir.normalized
+end
+
+function spellFireBall:GetBreakPieceStartWorldPosition(d)
+    if d == nil then return nil end
+
+    local pos = nil
+
+    -- Posizione originale del frammento convertita dallo spazio locale della faccia.
+    -- Non usiamo una world position cache fissa, perché il Kurohitsugi può essere castato
+    -- in punti diversi e visualDataCached resta vero tra un cast e l'altro.
+    pcall(function()
+        if d.container ~= nil and d.pos ~= nil then
+            pos = d.container:TransformPoint(d.pos)
+        end
+    end)
+
+    if pos == nil and d.trans ~= nil then
+        pcall(function()
+            pos = d.trans.position
+        end)
+    end
+
+    return pos
+end
+
+function spellFireBall:GetBreakPieceScatterWorldDirection(d, outwardWorld, startWorldPos)
+    if d == nil then return UE.Vector3(0, 0, 0) end
+    if d.container == nil then return UE.Vector3(0, 0, 0) end
+    if startWorldPos == nil then return UE.Vector3(0, 0, 0) end
+
+    local center = d.container.position
+    local scatter = startWorldPos - center
+
+    -- Rimuoviamo la componente lungo la normale outward, così lo scatter resta
+    -- sul piano della faccia e non spinge tutto il lato come blocco unico.
+    pcall(function()
+        if outwardWorld ~= nil then
+            local dot = UE.Vector3.Dot(scatter, outwardWorld)
+            scatter = scatter - outwardWorld * dot
+        end
+    end)
+
+    if scatter == nil or scatter.sqrMagnitude < 0.001 then
+        return UE.Vector3(0, 0, 0)
+    end
+
+    return scatter.normalized
+end
+
+function spellFireBall:DisableLegacyBreakPieces()
+    if self.breakPiecesRoot == nil then return end
+
+    for i = 0, self.breakPiecesRoot.childCount - 1 do
+        local child = self.breakPiecesRoot:GetChild(i)
+
+        if child ~= nil then
+            local n = string.lower(tostring(child.name))
+
+            -- Vecchio sistema decorativo: non deve più essere animato né mostrato.
+            if string.find(n, "break_big") ~= nil or string.find(n, "break_small") ~= nil then
+                child.gameObject:SetActive(false)
+            end
+        end
+    end
+end
+
+function spellFireBall:CacheBreakPiecesData()
+    self.breakPieceData = {}
+
+    if self.breakPiecesRoot == nil then return end
+
+    self:DisableLegacyBreakPieces()
+
+    local added = {}
+
+    for i = 0, self.breakPiecesRoot.childCount - 1 do
+        local sideRoot = self.breakPiecesRoot:GetChild(i)
+
+        if sideRoot ~= nil and self:IsBreakSideRootName(sideRoot.name) then
+            sideRoot.gameObject:SetActive(true)
+
+            pcall(function()
+                local renderers = sideRoot:GetComponentsInChildren(typeof(UE.Renderer), true)
+
+                if renderers ~= nil then
+                    for r = 0, renderers.Length - 1 do
+                        local renderer = renderers[r]
+
+                        if renderer ~= nil and renderer.transform ~= nil then
+                            local tr = renderer.transform
+
+                            -- Non animiamo il contenitore BreakSide_*, solo i frammenti interni con mesh.
+                            if tr ~= sideRoot and not added[tr] then
+                                added[tr] = true
+
+                                local index = #self.breakPieceData + 1
+                                local sign = 1
+                                if (index % 2) == 0 then sign = -1 end
+
+                                table.insert(self.breakPieceData, {
+                                    trans = tr,
+                                    container = sideRoot,
+                                    sideName = sideRoot.name,
+                                    scale = tr.localScale,
+                                    pos = tr.localPosition,
+                                    rot = tr.localRotation,
+
+                                    -- V5: moltiplicatori deterministici, non random runtime.
+                                    -- Caduta più disordinata: alcuni frammenti partono subito, altri in leggero ritardo,
+                                    -- e ogni pezzo raggiunge il sotto-pavimento con velocità diversa.
+                                    fallDelay = (index % 7) * 0.020,
+                                    fallSpeedMul = 1.04 + (index % 7) * 0.085,
+                                    outwardMul = 0.86 + (index % 5) * 0.15,
+                                    scatterMul = 0.82 + (index % 8) * 0.14,
+                                    spinMul = 0.82 + (index % 7) * 0.16,
+
+                                    spin = UE.Vector3(
+                                        sign * (42 + (index % 5) * 10),
+                                        sign * (64 + (index % 4) * 14),
+                                        34 + (index % 6) * 8
+                                    )
+                                })
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+
+    print("KUROHITSUGI TEST - cached shattered fragments=" .. tostring(#self.breakPieceData))
+end
+
+function spellFireBall:IsBreakSmokeEndName(rawName)
+    if rawName == nil then return false end
+
+    local n = string.lower(tostring(rawName))
+
+    return n == "smoke_end_1" or n == "smoke_end_2"
+end
+
+function spellFireBall:FindBreakSmokeEndRecursive(root, results)
+    if root == nil then return end
+    if results == nil then return end
+
+    pcall(function()
+        if self:IsBreakSmokeEndName(root.name) then
+            table.insert(results, root)
+        end
+    end)
+
+    local count = 0
+    pcall(function()
+        count = root.childCount
+    end)
+
+    if count == nil then count = 0 end
+
+    for i = 0, count - 1 do
+        local child = nil
+        pcall(function()
+            child = root:GetChild(i)
+        end)
+
+        if child ~= nil then
+            self:FindBreakSmokeEndRecursive(child, results)
+        end
+    end
+end
+
+function spellFireBall:CacheBreakSmokeEndData()
+    self.breakSmokeEndData = {}
+
+    if self.breakPiecesRoot == nil then return end
+
+    local found = {}
+    self:FindBreakSmokeEndRecursive(self.breakPiecesRoot, found)
+
+    for i = 1, #found do
+        local tr = found[i]
+
+        if tr ~= nil then
+            table.insert(self.breakSmokeEndData, {
+                trans = tr,
+                pos = tr.localPosition,
+                rot = tr.localRotation,
+                scale = tr.localScale
+            })
+        end
+    end
+
+    print("KUROHITSUGI TEST - cached smoke end roots=" .. tostring(#self.breakSmokeEndData))
+end
+
+function spellFireBall:ResetBreakSmokeEndPositions()
+    if self.breakSmokeEndData == nil then return end
+
+    for i = 1, #self.breakSmokeEndData do
+        local d = self.breakSmokeEndData[i]
+        local tr = d.trans
+
+        if tr ~= nil then
+            tr.localPosition = d.pos
+            tr.localRotation = d.rot
+            tr.localScale = d.scale
+            tr.gameObject:SetActive(true)
+        end
+    end
+end
+
+function spellFireBall:AnimateBreakSmokeEnds(rawBreakT)
+    if self.breakSmokeEndData == nil then return end
+    if rawBreakT == nil then return end
+
+    -- delay/duration sono in secondi, ma rawBreakT è normalizzato 0..1.
+    -- Li convertiamo in percentuale della finestra di frantumazione.
+    local totalDuration = self.breakPiecesDuration or 1.82
+    if totalDuration <= 0.05 then totalDuration = 0.05 end
+
+    local delaySec = self.breakSmokeEndStartDelay or 0.04
+    local durationSec = self.breakSmokeEndDuration or totalDuration
+    if durationSec <= 0.05 then durationSec = 0.05 end
+
+    local delayT = delaySec / totalDuration
+    local durationT = durationSec / totalDuration
+
+    local smokeT = 0
+    if rawBreakT > delayT then
+        smokeT = (rawBreakT - delayT) / durationT
+    end
+    smokeT = EaseOutCubic(smokeT)
+
+    local targetY = self.breakSmokeEndTargetLocalY or -4.0
+
+    for i = 1, #self.breakSmokeEndData do
+        local d = self.breakSmokeEndData[i]
+        local tr = d.trans
+
+        if tr ~= nil then
+            tr.gameObject:SetActive(true)
+
+            -- Muoviamo solo la Y locale: il particle resta com'è, ma scende come una nebbia che affonda.
+            tr.localPosition = UE.Vector3(
+                d.pos.x,
+                Lerp(d.pos.y, targetY, smokeT),
+                d.pos.z
+            )
+        end
+    end
+end
+
 function spellFireBall:CacheVisualData()
     self:ForceFinalTransforms()
 
@@ -687,6 +1036,7 @@ function spellFireBall:CacheVisualData()
     self.topData = {}
     self.spikeData = {}
     self.breakPieceData = {}
+    self.breakSmokeEndData = {}
 
     if self.linesRoot ~= nil then
         for i = 0, self.linesRoot.childCount - 1 do
@@ -745,19 +1095,8 @@ function spellFireBall:CacheVisualData()
         end
     end
 
-    if self.breakPiecesRoot ~= nil then
-        for i = 0, self.breakPiecesRoot.childCount - 1 do
-            local child = self.breakPiecesRoot:GetChild(i)
-            if child ~= nil then
-                table.insert(self.breakPieceData, {
-                    trans = child,
-                    scale = child.localScale,
-                    pos = child.localPosition,
-                    rot = child.localRotation
-                })
-            end
-        end
-    end
+    self:CacheBreakPiecesData()
+    self:CacheBreakSmokeEndData()
 
     self.visualDataCached = true
 end
@@ -1745,10 +2084,16 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
         end
     end
 
+    self:DisableLegacyBreakPieces()
+
     if self.breakPieceData ~= nil then
         for i = 1, #self.breakPieceData do
             local d = self.breakPieceData[i]
             local tr = d.trans
+
+            if d.container ~= nil then
+                d.container.gameObject:SetActive(true)
+            end
 
             tr.gameObject:SetActive(false)
             tr.localPosition = d.pos
@@ -1756,6 +2101,8 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
             tr.localScale = d.scale * self.breakPiecesStartScaleMultiplier
         end
     end
+
+    self:ResetBreakSmokeEndPositions()
 
     self:ResetSequenceFlags()
 end
@@ -1970,27 +2317,81 @@ function spellFireBall:GetBreakOutwardDirection(pos)
 end
 
 function spellFireBall:AnimateBreakPieces()
+    local rawT = Clamp01((self.sequenceTimer - self.breakPiecesTime) / self.breakPiecesDuration)
+
+    -- Gli smoke finali seguono la stessa finestra temporale dei frammenti,
+    -- ma scendono verso Y locale -4 per dare la sensazione di svanire nel pavimento.
+    self:AnimateBreakSmokeEnds(rawT)
+
     if self.breakPieceData == nil then return end
 
-    local t = EaseOutCubic((self.sequenceTimer - self.breakPiecesTime) / self.breakPiecesDuration)
+    local openPhase = self.breakPiecesOpenPhase or 0.22
+    if openPhase < 0.05 then openPhase = 0.05 end
+
+    local fallStart = self.breakPiecesFallStart or 0.04
+    if fallStart < 0 then fallStart = 0 end
+    if fallStart > 0.90 then fallStart = 0.90 end
+
+    local openT = EaseOutCubic(rawT / openPhase)
+
+    local outwardDistance = self.breakPiecesOutwardDistance or 0.38
+    local scatterDistance = self.breakPiecesScatterDistance or 0.48
+    local fallDistance = self.breakPiecesFallDistance or 7.10
 
     for i = 1, #self.breakPieceData do
         local d = self.breakPieceData[i]
         local tr = d.trans
 
-        local outwardDir = self:GetBreakOutwardDirection(d.pos)
-        local endPos = d.pos + outwardDir * self.breakPiecesOutwardDistance
+        if d.container ~= nil then
+            d.container.gameObject:SetActive(true)
+        end
+
+        local startWorldPos = self:GetBreakPieceStartWorldPosition(d)
+        if startWorldPos == nil then
+            startWorldPos = tr.position
+        end
+
+        local outwardWorld = self:GetBreakSideOutwardWorldDirection(d.sideName, d.container)
+        local scatterWorld = self:GetBreakPieceScatterWorldDirection(d, outwardWorld, startWorldPos)
+
+        local outwardMul = d.outwardMul or 1.0
+        local scatterMul = d.scatterMul or 1.0
+        local fallSpeedMul = d.fallSpeedMul or 1.0
+        local pieceFallStart = fallStart + (d.fallDelay or 0)
+        if pieceFallStart > 0.82 then pieceFallStart = 0.82 end
+
+        local fallLinearT = 0
+        if rawT > pieceFallStart then
+            fallLinearT = ((rawT - pieceFallStart) / (1.0 - pieceFallStart)) * fallSpeedMul
+        end
+        fallLinearT = Clamp01(fallLinearT)
+        local fallT = EaseInCubic(fallLinearT)
+
+        -- I frammenti continuano a cadere fisicamente verso il basso,
+        -- ma non sono loro a dover arrivare obbligatoriamente a Y -4.
+        -- Quell'effetto di scomparsa lo fanno gli Smoke_End_1/2.
+        local openOffset = outwardWorld * (outwardDistance * openT * outwardMul)
+            + scatterWorld * (scatterDistance * openT * scatterMul)
+
+        local fallOffset = UE.Vector3.down * (fallDistance * fallT)
 
         local startScale = d.scale * self.breakPiecesStartScaleMultiplier
         local endScale = d.scale * self.breakPiecesEndScaleMultiplier
 
         tr.gameObject:SetActive(true)
-        tr.localPosition = Vec3Lerp(d.pos, endPos, t)
-        tr.localScale = Vec3Lerp(startScale, endScale, t)
+        tr.position = startWorldPos + openOffset + fallOffset
+        tr.localScale = Vec3Lerp(startScale, endScale, rawT)
 
-        tr:Rotate(
-            UE.Vector3(outwardDir.x * 40, 35, outwardDir.z * 40) * UE.Time.deltaTime
-        )
+        -- Rotazione deterministica: non accumuliamo rotazione infinita frame dopo frame.
+        tr.localRotation = d.rot
+
+        local spinMul = d.spinMul or 1.0
+
+        if d.spin ~= nil then
+            tr:Rotate(d.spin * rawT * spinMul)
+        else
+            tr:Rotate(UE.Vector3(24, 36, 18) * rawT * spinMul)
+        end
     end
 end
 
@@ -4021,7 +4422,10 @@ function spellFireBall:UpdateKurohitsugiSequence()
                 self.spikesRoot.gameObject:SetActive(false)
             end
 
+            self:DisableLegacyBreakPieces()
+            self:ResetBreakSmokeEndPositions()
             SetActive(self.breakPiecesRoot, true)
+            PlayParticleSystemsInRoot(self.breakPiecesRoot)
         end
 
         self:AnimateBreakPieces()
