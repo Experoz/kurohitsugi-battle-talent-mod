@@ -201,9 +201,19 @@ local spellFireBall = {
     gravityAffectObjects = true,
     gravityVelocityAssist = 0,
 
-    -- Danno interno stile slash/hitscan: parte con le spike.
-    -- Non sostituisce la gravità: aggiunge colpi affidabili contro nemici grossi o singoli.
+    -- Danno diretto interno del Kurohitsugi V3.
+    -- Non dipende da rain/FlyObject, collider dei dardi o forza fisica.
+    -- Usa prima l'HP/CharacterCombatAttr del target; l'hit-scan resta solo fallback opzionale.
+    -- Valore principale da bilanciare:
+    --   basso: 40-60
+    --   medio/forte: 80-120
+    --   quasi letale: 150+
     kurohitsugiSlashDamageEnabled = true,
+    kurohitsugiDirectDamageAmount = 200,
+    kurohitsugiDirectDamageUseAttr = true,
+    kurohitsugiDirectDamageDebug = true,
+    kurohitsugiDirectDamageDebugHp = true,
+    kurohitsugiHitScanFallbackEnabled = false,
     kurohitsugiSlashPulseInterval = 0.18,
     kurohitsugiSlashLastPulseTime = -999,
     kurohitsugiSlashUsePhysicsUnits = true,
@@ -3504,13 +3514,49 @@ end
 function spellFireBall:GetKurohitsugiDamageHost()
     local host = nil
 
+    -- Prima scelta: interact della gemma, cioè lo stesso host già usato dallo slash/hitscan attuale.
     pcall(function()
         if self.interact ~= nil then
             host = self.interact
         end
     end)
 
+    -- Fallback: host esposto dal sistema Lua/BT, se disponibile.
+    pcall(function()
+        if host == nil and self.host ~= nil then
+            host = self.host
+        end
+    end)
+
     return host
+end
+
+function spellFireBall:PrepareKurohitsugiDirectDamageHost(host)
+    local amount = self.kurohitsugiDirectDamageAmount or 120
+
+    -- InteractTriggerX espone skillDamage: proviamo a impostarlo sullo script/trigger.
+    -- Se una proprietà non esiste in runtime, pcall evita di rompere la spell.
+    pcall(function()
+        self.skillDamage = amount
+    end)
+
+    pcall(function()
+        if self.interact ~= nil then
+            self.interact.skillDamage = amount
+        end
+    end)
+
+    pcall(function()
+        if self.host ~= nil then
+            self.host.skillDamage = amount
+        end
+    end)
+
+    pcall(function()
+        if host ~= nil then
+            host.skillDamage = amount
+        end
+    end)
 end
 
 function spellFireBall:GetSlashDamageDirection(pu, center)
@@ -3530,27 +3576,243 @@ function spellFireBall:GetSlashDamageDirection(pu, center)
     return dir
 end
 
-function spellFireBall:ApplySlashDamageToPhysicsUnit(pu, center)
-    if not self.kurohitsugiSlashDamageEnabled then return end
-    if pu == nil then return end
-    if not self:IsValidGravityTarget(pu) then return end
+function spellFireBall:GetKurohitsugiCombatAttr(target)
+    if target == nil then return nil end
 
-    local col = self:GetPhysicsUnitCollider(pu)
-    if col == nil then return end
+    local attr = nil
+
+    -- Caso migliore: target è un FullCharacterControl / role con attr diretto.
+    pcall(function()
+        if target.attr ~= nil then
+            attr = target.attr
+        end
+    end)
+
+    -- Fallback: alcuni oggetti espongono fc.attr.
+    pcall(function()
+        if attr == nil and target.fc ~= nil and target.fc.attr ~= nil then
+            attr = target.fc.attr
+        end
+    end)
+
+    -- Fallback sul root PhysicsUnit.
+    pcall(function()
+        if attr == nil and target.GetRootPu ~= nil then
+            local root = target:GetRootPu()
+            if root ~= nil and root.attr ~= nil then
+                attr = root.attr
+            end
+        end
+    end)
+
+    -- Fallback da Transform: prova a risalire a FullCharacterControl.
+    pcall(function()
+        if attr == nil then
+            local tr = self:GetPhysicsUnitTransform(target)
+            if tr ~= nil then
+                local fc = tr:GetComponentInParent(typeof(CL.FullCharacterControl))
+                if fc ~= nil and fc.attr ~= nil then
+                    attr = fc.attr
+                end
+            end
+        end
+    end)
+
+    return attr
+end
+
+function spellFireBall:GetKurohitsugiAttrHpDebugValue(attr)
+    if attr == nil then return nil end
+
+    local hpValue = nil
+
+    -- CharacterCombatAttr eredita CombatAttr e contiene hp come CharacterStat.
+    -- CharacterStat espone Value/BaseValue: proviamo entrambi in pcall per compatibilità xLua.
+    pcall(function()
+        if attr.hp ~= nil and attr.hp.Value ~= nil then
+            hpValue = attr.hp.Value
+        end
+    end)
+
+    pcall(function()
+        if hpValue == nil and attr.hp ~= nil and attr.hp.value ~= nil then
+            hpValue = attr.hp.value
+        end
+    end)
+
+    pcall(function()
+        if hpValue == nil and attr.hp ~= nil and attr.hp.BaseValue ~= nil then
+            hpValue = attr.hp.BaseValue
+        end
+    end)
+
+    -- Fallback generico: alcuni attr leggono le stats via ReadValue.
+    pcall(function()
+        if hpValue == nil and attr.ReadValue ~= nil then
+            hpValue = attr:ReadValue("hp")
+        end
+    end)
+
+    return hpValue
+end
+
+function spellFireBall:IsKurohitsugiAttrDead(attr)
+    if attr == nil then return false end
+
+    local dead = false
+
+    pcall(function()
+        if attr.IsDead ~= nil and attr:IsDead() then
+            dead = true
+        end
+    end)
+
+    return dead
+end
+
+function spellFireBall:ApplyKurohitsugiAttrDamageToTarget(target)
+    if not self.kurohitsugiDirectDamageUseAttr then return false end
+    if target == nil then return false end
+
+    local attr = self:GetKurohitsugiCombatAttr(target)
+    if attr == nil then
+        if self.kurohitsugiDirectDamageDebug then
+            print("KUROHITSUGI WARNING - Direct attr damage target attr nil target=" .. tostring(self:GetSafeName(target)))
+        end
+        return false
+    end
+
+    local amount = self.kurohitsugiDirectDamageAmount or 120
+    local damageDelta = -UE.Mathf.Abs(amount)
+    local applied = false
+
+    local beforeHp = nil
+    if self.kurohitsugiDirectDamageDebugHp then
+        beforeHp = self:GetKurohitsugiAttrHpDebugValue(attr)
+    end
+
+    -- V3 FIX:
+    -- ReduceHp nella documentazione ha default dhp=-100, quindi gli passiamo un delta NEGATIVO.
+    -- In V2 passavamo +amount: la chiamata risultava "applied", ma poteva non togliere HP.
+    pcall(function()
+        if attr.ReduceHp ~= nil then
+            attr:ReduceHp(damageDelta)
+            applied = true
+        end
+    end)
+
+    -- Fallback 1: AddHp con valore negativo.
+    if not applied then
+        pcall(function()
+            if attr.AddHp ~= nil then
+                attr:AddHp(damageDelta, true)
+                applied = true
+            end
+        end)
+    end
+
+    -- Fallback 2: UpdateHp con valore negativo.
+    if not applied then
+        pcall(function()
+            if attr.UpdateHp ~= nil then
+                attr:UpdateHp(damageDelta)
+                applied = true
+            end
+        end)
+    end
+
+    -- Aggiorna barra/numero danno se il target espone quei metodi.
+    if applied then
+        pcall(function()
+            if attr.UpdateHpBar ~= nil then
+                attr:UpdateHpBar()
+            end
+        end)
+
+        pcall(function()
+            if attr.PlayDamageNum ~= nil then
+                attr:PlayDamageNum(UE.Mathf.RoundToInt(damageDelta))
+            end
+        end)
+
+        if self.kurohitsugiDirectDamageDebug then
+            local afterHp = nil
+            if self.kurohitsugiDirectDamageDebugHp then
+                afterHp = self:GetKurohitsugiAttrHpDebugValue(attr)
+            end
+
+            print("KUROHITSUGI TEST - Direct attr damage applied amount=" .. tostring(amount)
+                .. " delta=" .. tostring(damageDelta)
+                .. " hpBefore=" .. tostring(beforeHp)
+                .. " hpAfter=" .. tostring(afterHp)
+                .. " dead=" .. tostring(self:IsKurohitsugiAttrDead(attr))
+                .. " target=" .. tostring(self:GetSafeName(target)))
+        end
+    end
+
+    return applied
+end
+
+function spellFireBall:ApplyKurohitsugiHitScanDamageFallback(pu, target, center)
+    if not self.kurohitsugiHitScanFallbackEnabled then return false end
+    if pu == nil then return false end
+    if target == nil then target = pu end
+
+    local col = self:GetPhysicsUnitCollider(target)
+    if col == nil then
+        col = self:GetPhysicsUnitCollider(pu)
+    end
+    if col == nil then return false end
 
     local host = self:GetKurohitsugiDamageHost()
-    if host == nil then return end
+    if host == nil then return false end
 
-    local rb = self:GetPhysicsUnitRigidbody(pu)
-    local dir = self:GetSlashDamageDirection(pu, center)
+    self:PrepareKurohitsugiDirectDamageHost(host)
 
-    -- Metodo copiato dalla logica FlySlash: BeginScanDmg -> ApplyHitScanDamage -> EndHitScan.
-    -- Tutto in pcall: se BT non espone qualche campo sul nostro host, non rompe la spell.
+    local dir = self:GetSlashDamageDirection(target, center)
+    local applied = false
+
     pcall(function()
         CL.InteractTrigger.BeginScanDmg()
-        CL.InteractTrigger.ApplyHitScanDamage(col, host, host.rb, host.col, dir, host.camp)
+        CL.InteractTrigger.ApplyHitScanDamage(col, host, host.rb, host.col, dir, host.camp, false)
         CL.InteractTrigger.EndHitScan()
+        applied = true
     end)
+
+    return applied
+end
+
+function spellFireBall:ApplySlashDamageToPhysicsUnit(pu, center, appliedMap)
+    if not self.kurohitsugiSlashDamageEnabled then return false end
+    if pu == nil then return false end
+
+    -- Per il danno diretto usiamo il target logico/role quando possibile.
+    -- È più affidabile contro mostri grandi o con collider strani rispetto ai singoli pezzi fisici.
+    local target = self:GetSpikeShockWaveRoleTarget(pu)
+    if target == nil then
+        target = pu
+    end
+
+    if not self:IsSpikeShockWaveValidTarget(target) then return false end
+    if self:IsChargeReiatsuLikelyDead(target) then return false end
+
+    -- Deduplica per pulse: QueryLogicTargetInRadiusTemp e QueryInRadiusTemp possono restituire
+    -- lo stesso nemico come role/root/parte fisica. Il danno numerico deve entrare una volta sola per pulse.
+    if appliedMap ~= nil then
+        if appliedMap[target] then
+            return false
+        end
+        appliedMap[target] = true
+    end
+
+    local applied = self:ApplyKurohitsugiAttrDamageToTarget(target)
+
+    -- Fallback opzionale: resta spento di default perché la V1 hit-scan non era affidabile.
+    if not applied then
+        applied = self:ApplyKurohitsugiHitScanDamageFallback(pu, target, center)
+    end
+
+    return applied
 end
 
 function spellFireBall:ApplyKurohitsugiSlashDamagePulse()
@@ -3558,6 +3820,8 @@ function spellFireBall:ApplyKurohitsugiSlashDamagePulse()
 
     local center = self:GetKurohitsugiGravityCenter()
     local targets = nil
+    local appliedMap = {}
+    local appliedCount = 0
 
     -- Prima proviamo i logic target: più sicuro e meno caotico.
     pcall(function()
@@ -3568,10 +3832,12 @@ function spellFireBall:ApplyKurohitsugiSlashDamagePulse()
 
     for i = 0, count - 1 do
         local pu = self:GetListItem(targets, i)
-        self:ApplySlashDamageToPhysicsUnit(pu, center)
+        if self:ApplySlashDamageToPhysicsUnit(pu, center, appliedMap) then
+            appliedCount = appliedCount + 1
+        end
     end
 
-    -- Poi, se serve, proviamo anche le parti fisiche: qui NON applichiamo forza, solo hit scan damage.
+    -- Fallback sulle parti fisiche: deduplicato, quindi non moltiplica il danno sullo stesso mostro.
     if self.kurohitsugiSlashUsePhysicsUnits then
         local allTargets = nil
 
@@ -3583,11 +3849,14 @@ function spellFireBall:ApplyKurohitsugiSlashDamagePulse()
 
         for i = 0, allCount - 1 do
             local pu = self:GetListItem(allTargets, i)
-            self:ApplySlashDamageToPhysicsUnit(pu, center)
+            if self:ApplySlashDamageToPhysicsUnit(pu, center, appliedMap) then
+                appliedCount = appliedCount + 1
+            end
         end
     end
 
-    print("KUROHITSUGI TEST - Slash damage pulse")
+    print("KUROHITSUGI TEST - Direct damage pulse applied=" .. tostring(appliedCount)
+        .. " amount=" .. tostring(self.kurohitsugiDirectDamageAmount))
 end
 
 function spellFireBall:UpdateKurohitsugiSlashDamage()
