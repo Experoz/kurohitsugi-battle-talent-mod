@@ -40,7 +40,20 @@ local spellFireBall = {
     groundMinNormalY = 0.55,
     groundFootprintRadius = 1.35,
 
+    -- Preview cube charge animation recuperata dal commit 160a1c2.
+    -- Parte piccolo durante il charge, cresce fino alla scala originale
+    -- e ruota in modo vorticoso/disordinato su più assi.
     rotationSpeed = 130,
+    previewChargeStartTime = 0,
+    previewChargeGrowDuration = 1.15,
+
+    previewCubeBaseScale = nil,
+    previewCubeStartScaleMultiplier = 0.18,
+    previewCubeEndScaleMultiplier = 1.00,
+
+    previewRotationBaseSpeed = 45,
+    previewRotationMaxSpeed = 650,
+    previewRotationChaosAmount = 1.70,
     targetMoveMultiplier = 34.0,
     maxTargetMove = 9.0,
 
@@ -1359,6 +1372,61 @@ function spellFireBall:ShowKurohitsugiPreview()
     SetActive(self.targetAreaRoot, true)
 end
 
+function spellFireBall:PreparePreviewCubeCharge()
+    self:FindKurohitsugiObjects()
+
+    self.previewChargeStartTime = UE.Time.time
+
+    if self.previewCube == nil then return end
+
+    if self.previewCubeBaseScale == nil then
+        self.previewCubeBaseScale = self.previewCube.localScale
+    end
+
+    self.previewCube.localScale = self.previewCubeBaseScale * self.previewCubeStartScaleMultiplier
+    self.previewCube.localRotation = UE.Quaternion.identity
+end
+
+function spellFireBall:UpdatePreviewCubeChargeVisual()
+    if self.previewCube == nil then return end
+
+    if self.previewCubeBaseScale == nil then
+        self.previewCubeBaseScale = self.previewCube.localScale
+    end
+
+    local elapsed = UE.Time.time - self.previewChargeStartTime
+    local t = Clamp01(elapsed / self.previewChargeGrowDuration)
+    local easedT = EaseOutCubic(t)
+
+    -- Crescita: piccolo -> dimensione originale del prefab.
+    local scaleMul = Lerp(self.previewCubeStartScaleMultiplier, self.previewCubeEndScaleMultiplier, easedT)
+    self.previewCube.localScale = self.previewCubeBaseScale * scaleMul
+
+    -- Rotazione: parte lenta e accelera fino a diventare vorticosa.
+    local speed = Lerp(self.previewRotationBaseSpeed, self.previewRotationMaxSpeed, easedT)
+
+    -- Assi variabili nel tempo: movimento disordinato ma controllato, non random puro.
+    local time = UE.Time.time
+    local chaos = self.previewRotationChaosAmount
+
+    local axis = UE.Vector3(
+        0.65 + UE.Mathf.Sin(time * 4.7) * chaos,
+        1.20 + UE.Mathf.Cos(time * 3.1) * chaos,
+        0.40 + UE.Mathf.Sin(time * 5.9 + 1.7) * chaos
+    )
+
+    if axis.sqrMagnitude < 0.001 then
+        axis = UE.Vector3(0.8, 1.4, 0.45)
+    else
+        axis = axis.normalized
+    end
+
+    -- Piccole pulsazioni di velocità per dare l'effetto carica instabile stile BSR.
+    local pulse = 1.0 + UE.Mathf.Sin(time * 13.0) * 0.20 + UE.Mathf.Sin(time * 21.0) * 0.10
+
+    self.previewCube:Rotate(axis * UE.Time.deltaTime * speed * pulse)
+end
+
 function spellFireBall:GetFlatAimDirection()
     local dir = UE.Vector3(-self.trans.up.x, 0, -self.trans.up.z)
 
@@ -1907,9 +1975,7 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:UpdateChargeReiatsuBind()
     self:UpdateReiatsuVisual()
 
-    if self.previewCube ~= nil then
-        self.previewCube:Rotate(UE.Vector3(0.8, 1.4, 0.45) * UE.Time.deltaTime * self.rotationSpeed)
-    end
+    self:UpdatePreviewCubeChargeVisual()
 
     if self.targetAreaRoot ~= nil and self.startHandLocalPos ~= nil and self.startTargetPos ~= nil then
         local currentHandLocalPos = self:GetHandRelativePos()
@@ -1953,6 +2019,10 @@ end
 function spellFireBall:HideKurohitsugiPreviewAll()
     self:StopKurohitsugiPreviewUpdate()
     self:FindKurohitsugiObjects()
+
+    if self.previewCube ~= nil and self.previewCubeBaseScale ~= nil then
+        self.previewCube.localScale = self.previewCubeBaseScale
+    end
 
     SetActive(self.palmPreviewRoot, false)
     SetActive(self.targetAreaRoot, false)
@@ -4573,6 +4643,7 @@ function spellFireBall:OnChargeBegin()
     end
 
     self:ShowKurohitsugiPreview()
+    self:PreparePreviewCubeCharge()
     self:InitTargetPosition()
     self:ShowReiatsuVisual()
     self:StartKurohitsugiPreviewUpdate()
