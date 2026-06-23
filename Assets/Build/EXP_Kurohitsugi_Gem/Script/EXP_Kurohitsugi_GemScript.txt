@@ -167,6 +167,8 @@ local spellFireBall = {
     -- La visuale resta Explosion-Ring Down; niente FlyObj dedicato.
     -- Lo script applica direttamente effetto stile Stomp ai nemici nel raggio.
     spikeGroundShockWaveEnabled = true,
+    -- Debug della shockwave fisica: spento dopo i test per non riempire la VR Console.
+    spikeGroundShockWaveDebug = false,
     spikeGroundShockWaveSpawned = false,
     -- Shockwave ad anello: colpisce i nemici intorno al Kurohitsugi,
     -- ma esclude quelli dentro il cubo. Raggio ampio per test.
@@ -211,8 +213,8 @@ local spellFireBall = {
     kurohitsugiSlashDamageEnabled = true,
     kurohitsugiDirectDamageAmount = 200,
     kurohitsugiDirectDamageUseAttr = true,
-    kurohitsugiDirectDamageDebug = true,
-    kurohitsugiDirectDamageDebugHp = true,
+    kurohitsugiDirectDamageDebug = false,
+    kurohitsugiDirectDamageDebugHp = false,
     kurohitsugiHitScanFallbackEnabled = false,
     kurohitsugiSlashPulseInterval = 0.18,
     kurohitsugiSlashLastPulseTime = -999,
@@ -298,7 +300,7 @@ local spellFireBall = {
     chargeReiatsuUseChestPressure = true,
     chargeReiatsuChestForceMultiplier = 1.0,
     chargeReiatsuChestVelocityDamping = 0.55,
-    chargeReiatsuPressureDebug = true,
+    chargeReiatsuPressureDebug = false,
 
     -- Evita che cadaveri/ragdoll già morti vengano ripresi dalla pressione e volino in assenza di gravità.
     chargeReiatsuSkipLikelyDead = true,
@@ -3855,8 +3857,10 @@ function spellFireBall:ApplyKurohitsugiSlashDamagePulse()
         end
     end
 
-    print("KUROHITSUGI TEST - Direct damage pulse applied=" .. tostring(appliedCount)
-        .. " amount=" .. tostring(self.kurohitsugiDirectDamageAmount))
+    if self.kurohitsugiDirectDamageDebug then
+        print("KUROHITSUGI TEST - Direct damage pulse applied=" .. tostring(appliedCount)
+            .. " amount=" .. tostring(self.kurohitsugiDirectDamageAmount))
+    end
 end
 
 function spellFireBall:UpdateKurohitsugiSlashDamage()
@@ -3938,22 +3942,28 @@ function spellFireBall:IsTargetInsideSpikeShockWaveRing(pu, center)
     local outer = self.spikeGroundShockWaveOuterRadius or self.spikeGroundShockWaveRadius or 10.0
 
     if distance < inner then
-        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped inside ring target="
-            .. tostring(self:GetSafeName(pu))
-            .. " distance=" .. tostring(distance))
+        if self.spikeGroundShockWaveDebug then
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped inside ring target="
+                .. tostring(self:GetSafeName(pu))
+                .. " distance=" .. tostring(distance))
+        end
         return false
     end
 
     if distance > outer then
-        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped outside ring target="
-            .. tostring(self:GetSafeName(pu))
-            .. " distance=" .. tostring(distance))
+        if self.spikeGroundShockWaveDebug then
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped outside ring target="
+                .. tostring(self:GetSafeName(pu))
+                .. " distance=" .. tostring(distance))
+        end
         return false
     end
 
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE ring target="
-        .. tostring(self:GetSafeName(pu))
-        .. " distance=" .. tostring(distance))
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE ring target="
+            .. tostring(self:GetSafeName(pu))
+            .. " distance=" .. tostring(distance))
+    end
 
     return true
 end
@@ -4069,7 +4079,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
     end
 
     if not self:IsSpikeShockWaveValidTarget(target) then
-        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped target=" .. tostring(self:GetSafeName(target)))
+        if self.spikeGroundShockWaveDebug then
+            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE skipped target=" .. tostring(self:GetSafeName(target)))
+        end
         return false
     end
 
@@ -4094,10 +4106,14 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
 
             if okDmg then
                 appliedSomething = true
-                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE damage applied")
+                if self.spikeGroundShockWaveDebug then
+                    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE damage applied")
+                end
             end
         else
-            print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE damage host nil")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE damage host nil")
+            end
         end
     end
 
@@ -4108,7 +4124,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
             target.muscleState:ClearAllStab()
             target.muscleState:EnterDizzy(self.spikeGroundShockWaveDizzyTime or 0.6)
             appliedSomething = true
-            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE muscle reaction applied")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE muscle reaction applied")
+            end
         end
     end)
 
@@ -4132,7 +4150,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
         if target.controller ~= nil then
             target.controller:AddPushback(center, self.spikeGroundShockWavePushbackDis or 10, true)
             appliedSomething = true
-            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pushback applied")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pushback applied")
+            end
         end
     end)
 
@@ -4157,7 +4177,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
         if target.AddForce ~= nil then
             target:AddForce(impulse, UE.ForceMode.Impulse)
             appliedSomething = true
-            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE target AddForce applied")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE target AddForce applied")
+            end
         end
     end)
 
@@ -4165,7 +4187,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
         if pu ~= target and pu.AddForce ~= nil then
             pu:AddForce(impulse, UE.ForceMode.Impulse)
             appliedSomething = true
-            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pu AddForce applied")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE pu AddForce applied")
+            end
         end
     end)
 
@@ -4180,7 +4204,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
             rb:AddForce(impulse, UE.ForceMode.Impulse)
             rb:AddTorque(UE.Random.insideUnitSphere * 50, UE.ForceMode.Impulse)
             appliedSomething = true
-            print("KUROHITSUGI TEST - DIRECT SHOCKWAVE rb impulse applied")
+            if self.spikeGroundShockWaveDebug then
+                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE rb impulse applied")
+            end
         end
     end)
 
@@ -4190,7 +4216,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
             if target.motion ~= nil then
                 target.motion:Knockout()
                 appliedSomething = true
-                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE knockout applied")
+                if self.spikeGroundShockWaveDebug then
+                    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE knockout applied")
+                end
             end
         end)
     end
@@ -4200,7 +4228,9 @@ function spellFireBall:ApplySpikeGroundShockWaveToPhysicsUnit(pu, center)
             if target.muscleState ~= nil then
                 target.muscleState:DoThrowing()
                 appliedSomething = true
-                print("KUROHITSUGI TEST - DIRECT SHOCKWAVE throwing applied")
+                if self.spikeGroundShockWaveDebug then
+                    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE throwing applied")
+                end
             end
         end)
     end
@@ -4211,15 +4241,21 @@ end
 function spellFireBall:SpawnSpikeGroundShockWave()
     -- Nome mantenuto per compatibilità col punto di chiamata già esistente.
     -- Ora NON spawna più un FlyObj: applica direttamente l'effetto fisico Stomp-like.
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE CALLED")
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE CALLED")
+    end
 
     if not self.spikeGroundShockWaveEnabled then
-        print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE disabled")
+        if self.spikeGroundShockWaveDebug then
+            print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE disabled")
+        end
         return
     end
 
     if self.spikeGroundShockWaveSpawned then
-        print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE already used")
+        if self.spikeGroundShockWaveDebug then
+            print("KUROHITSUGI WARNING - DIRECT SHOCKWAVE already used")
+        end
         return
     end
 
@@ -4229,9 +4265,11 @@ function spellFireBall:SpawnSpikeGroundShockWave()
     local radius = self.spikeGroundShockWaveOuterRadius or self.spikeGroundShockWaveRadius or self.gravityZoneRadius or 10.0
     local inner = self.spikeGroundShockWaveInnerRadius or 2.0
 
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE center=" .. tostring(center)
-        .. " inner=" .. tostring(inner)
-        .. " outer=" .. tostring(radius))
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE center=" .. tostring(center)
+            .. " inner=" .. tostring(inner)
+            .. " outer=" .. tostring(radius))
+    end
 
     local logicTargets = nil
     local physicsTargets = nil
@@ -4241,14 +4279,18 @@ function spellFireBall:SpawnSpikeGroundShockWave()
     end)
 
     local logicCount = self:GetListCount(logicTargets)
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE logic ok=" .. tostring(okLogic) .. " count=" .. tostring(logicCount))
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE logic ok=" .. tostring(okLogic) .. " count=" .. tostring(logicCount))
+    end
 
     local okPhysics = pcall(function()
         physicsTargets = CL.PhysicsUnit.QueryInRadiusTemp(center, radius)
     end)
 
     local physicsCount = self:GetListCount(physicsTargets)
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE physics ok=" .. tostring(okPhysics) .. " count=" .. tostring(physicsCount))
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE physics ok=" .. tostring(okPhysics) .. " count=" .. tostring(physicsCount))
+    end
 
     local appliedCount = 0
     local appliedMap = {}
@@ -4278,7 +4320,9 @@ function spellFireBall:SpawnSpikeGroundShockWave()
         end
     end
 
-    print("KUROHITSUGI TEST - DIRECT SHOCKWAVE applied=" .. tostring(appliedCount))
+    if self.spikeGroundShockWaveDebug then
+        print("KUROHITSUGI TEST - DIRECT SHOCKWAVE applied=" .. tostring(appliedCount))
+    end
 end
 
 function spellFireBall:ApplyGravityFinalSlamToPhysicsUnit(pu, center)
