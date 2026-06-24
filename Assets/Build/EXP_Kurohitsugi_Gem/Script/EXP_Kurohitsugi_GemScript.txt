@@ -1,3 +1,16 @@
+-- =========================================================
+-- EXP KUROHITSUGI GEM SCRIPT
+-- Branch: feature/kurohitsugi-script-refactor
+--
+-- Conservative refactor step 1:
+-- section headers only, no gameplay/timing/damage/prefab/addressable changes.
+-- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
+-- =========================================================
+
+-- =========================================================
+-- CONFIG / STATE TABLE
+-- =========================================================
+
 local spellFireBall = {
     enchantingEffect = "",
     enchantEffectFly = "",
@@ -408,6 +421,10 @@ local spellFireBall = {
     visualDataCached = false,
 }
 
+-- =========================================================
+-- BASIC UTILS
+-- =========================================================
+
 local function SetActive(trans, active)
     if trans ~= nil then
         trans.gameObject:SetActive(active)
@@ -534,6 +551,10 @@ local function GetHiddenSpikeScale(finalScale)
     )
 end
 
+-- =========================================================
+-- SEQUENCE TIMING
+-- =========================================================
+
 function spellFireBall:CalculateSequenceTimes()
     self.linesStartTime = self.delayBeforeStart
     self.topLinesStartTime = self.linesStartTime + self.verticalLinesDuration
@@ -566,6 +587,10 @@ function spellFireBall:CalculateSequenceTimes()
         .. " glowEnd=" .. tostring(self.glowTransitionTime + self.glowTransitionDuration)
         .. " break=" .. tostring(self.breakPiecesTime))
 end
+
+-- =========================================================
+-- ROOT DISCOVERY / CACHE
+-- =========================================================
 
 function spellFireBall:FindKurohitsugiObjects()
     if self.palmPreviewRoot == nil then
@@ -641,6 +666,10 @@ function spellFireBall:FindKurohitsugiObjects()
     end
 end
 
+-- =========================================================
+-- VISUAL CACHE / STATIC TRANSFORM FIXES
+-- =========================================================
+
 function spellFireBall:ForceFinalTransforms()
     if self.linesRoot ~= nil then
         for i = 0, self.linesRoot.childCount - 1 do
@@ -715,6 +744,10 @@ function spellFireBall:ForceFinalTransforms()
         end
     end
 end
+
+-- =========================================================
+-- BREAK PIECES HELPERS
+-- =========================================================
 
 function spellFireBall:IsBreakSideRootName(rawName)
     if rawName == nil then return false end
@@ -1049,6 +1082,10 @@ function spellFireBall:AnimateBreakSmokeEnds(rawBreakT)
     end
 end
 
+-- =========================================================
+-- VISUAL DATA CACHE
+-- =========================================================
+
 function spellFireBall:CacheVisualData()
     self:ForceFinalTransforms()
 
@@ -1125,6 +1162,10 @@ function spellFireBall:CacheVisualData()
 
     self.visualDataCached = true
 end
+
+-- =========================================================
+-- DISSOLVE CONTROLS
+-- =========================================================
 
 function spellFireBall:CacheLineDissolveRenderers()
     self.lineDissolveRenderers = {}
@@ -1271,6 +1312,10 @@ function spellFireBall:SetTopDissolveAmount(amount)
     end
 end
 
+-- =========================================================
+-- PLAYER / HAND HELPERS
+-- =========================================================
+
 function spellFireBall:GetPlayerTrans()
     if self.playerTrans ~= nil then return self.playerTrans end
 
@@ -1291,6 +1336,10 @@ function spellFireBall:GetHandRelativePos()
 
     return self.trans.position
 end
+
+-- =========================================================
+-- REIATSU VISUALS
+-- =========================================================
 
 function spellFireBall:UpdateReiatsuVisual()
     self:FindKurohitsugiObjects()
@@ -1378,6 +1427,10 @@ function spellFireBall:HideGripReiatsuVisual()
     print("KUROHITSUGI TEST - Grip Reiatsu visual hidden")
 end
 
+-- =========================================================
+-- PREVIEW CUBE / TARGET AREA VISUALS
+-- =========================================================
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     SetActive(self.palmPreviewRoot, true)
@@ -1438,6 +1491,10 @@ function spellFireBall:UpdatePreviewCubeChargeVisual()
 
     self.previewCube:Rotate(axis * UE.Time.deltaTime * speed * pulse)
 end
+
+-- =========================================================
+-- TARGETING / GROUND RAYCAST
+-- =========================================================
 
 function spellFireBall:GetFlatAimDirection()
     local dir = UE.Vector3(-self.trans.up.x, 0, -self.trans.up.z)
@@ -1692,6 +1749,10 @@ function spellFireBall:InitTargetPosition()
     end
 end
 
+-- =========================================================
+-- INPUT HELPERS
+-- =========================================================
+
 function spellFireBall:GetClosestPlayerHandForKurohitsugiInput()
     local player = nil
     pcall(function()
@@ -1787,6 +1848,10 @@ function spellFireBall:IsPrimaryTriggerPressed()
     return self:GetHandButtonPressed(hand, CL.VRTKInputButton.ButtonType.Trigger)
 end
 
+-- =========================================================
+-- GEM GRAB EVENTS / GRIP WATCHER
+-- =========================================================
+
 function spellFireBall:OnGrab(a, g)
     -- Avvia solo il watcher del Grip-only.
     -- Non salviamo a.attachedHand: nella versione precedente poteva far leggere la mano sbagliata
@@ -1798,6 +1863,10 @@ function spellFireBall:OnUnGrab(a, g)
     self:StopGripReiatsuOnly()
     self:StopGripReiatsuOnlyWatcher()
 end
+
+-- =========================================================
+-- GRIP CANCEL DURING CHARGE
+-- =========================================================
 
 function spellFireBall:PrintGripCancelDebug(gripPressed)
     if not self.gripCancelDebug then return end
@@ -1860,6 +1929,10 @@ function spellFireBall:UpdateGripCancelDuringCharge()
 
     self.gripCancelWasPressed = gripPressed
 end
+
+-- =========================================================
+-- GRIP REIATSU ONLY MODE
+-- =========================================================
 
 function spellFireBall:PrintGripReiatsuOnlyDebug(gripPressed, triggerPressed)
     if not self.gripReiatsuOnlyDebug then return end
@@ -1978,6 +2051,10 @@ function spellFireBall:StopGripReiatsuOnlyWatcher()
     end
 end
 
+-- =========================================================
+-- PREVIEW UPDATE LOOP
+-- =========================================================
+
 function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:FindKurohitsugiObjects()
 
@@ -2040,6 +2117,10 @@ function spellFireBall:HideKurohitsugiPreviewAll()
     SetActive(self.targetAreaRoot, false)
     self:HideReiatsuVisual()
 end
+
+-- =========================================================
+-- SEQUENCE RESET / INITIAL STATE / CLEANUP
+-- =========================================================
 
 function spellFireBall:StopKurohitsugiSequence()
     if self.sequenceSchedId ~= nil then
@@ -2233,6 +2314,10 @@ function spellFireBall:HideKurohitsugiCastAll()
     self.isSequenceRunning = false
     self.pendingCastBlocked = false
 end
+
+-- =========================================================
+-- VISUAL ANIMATION - COFFIN FORMATION
+-- =========================================================
 
 function spellFireBall:AnimateLines()
     if self.lineData == nil then return end
@@ -2476,6 +2561,10 @@ function spellFireBall:AnimateBreakPieces()
         end
     end
 end
+
+-- =========================================================
+-- CAST LOCK
+-- =========================================================
 
 function spellFireBall:LockCastTransform()
     if self.castRoot ~= nil and self.castLockedPos ~= nil then
@@ -3319,6 +3408,10 @@ function spellFireBall:UpdateChargeReiatsuBind()
 end
 
 
+-- =========================================================
+-- GRAVITY ZONE FORCES
+-- =========================================================
+
 function spellFireBall:GetGravityRampMultiplier()
     if not self.gravityUseRamp then return 1.0 end
     if self.wallsGrowDuration == nil or self.wallsGrowDuration <= 0 then return 1.0 end
@@ -3512,6 +3605,10 @@ function spellFireBall:ApplySpikePushToPhysicsUnit(pu, center)
         end
     end)
 end
+
+-- =========================================================
+-- KUROHITSUGI DAMAGE
+-- =========================================================
 
 function spellFireBall:GetKurohitsugiDamageHost()
     local host = nil
@@ -3875,6 +3972,10 @@ function spellFireBall:UpdateKurohitsugiSlashDamage()
         self:ApplyKurohitsugiSlashDamagePulse()
     end
 end
+
+-- =========================================================
+-- SPIKE PUSH / GROUND SHOCKWAVE
+-- =========================================================
 
 function spellFireBall:ApplyGravitySpikePush()
     if self.gravitySpikePushDone then return end
@@ -4648,6 +4749,10 @@ function spellFireBall:UpdateSequenceReiatsuContinuity()
 end
 
 
+-- =========================================================
+-- GLOW TRANSITION / RAIN PULSES
+-- =========================================================
+
 function spellFireBall:StartGlowTransition()
     if self.glowTransitionRoot == nil then return end
     if self.startedGlowTransition then return end
@@ -4711,6 +4816,10 @@ function spellFireBall:UpdateSecondRainPulseWithGlow()
         print("KUROHITSUGI TEST - Second rain pulse with glow")
     end
 end
+
+-- =========================================================
+-- MAIN SEQUENCE UPDATE
+-- =========================================================
 
 function spellFireBall:UpdateKurohitsugiSequence()
     self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
@@ -4819,6 +4928,10 @@ function spellFireBall:UpdateKurohitsugiSequence()
     end
 end
 
+-- =========================================================
+-- SEQUENCE START / CAST RESET / CAST EXECUTION
+-- =========================================================
+
 function spellFireBall:StartKurohitsugiSequence()
     if self.isSequenceRunning then
         print("KUROHITSUGI BLOCKED - sequence already running")
@@ -4925,6 +5038,10 @@ function spellFireBall:CastKurohitsugiAtTarget()
     print("KUROHITSUGI TEST - Final animated sequence started")
 end
 
+-- =========================================================
+-- CHARGE EVENTS
+-- =========================================================
+
 function spellFireBall:OnChargeBegin()
     if self.gripReiatsuOnlyActive then
         self:StopGripReiatsuOnly()
@@ -5026,6 +5143,10 @@ function spellFireBall:OnChargeCancel()
     self:HideKurohitsugiPreviewAll()
 end
 
+-- =========================================================
+-- ENCHANT FALLBACK EVENTS
+-- =========================================================
+
 function spellFireBall.OnEnchantSkillWithRole(ib, fc, mu, thisCol, otherRB, otherCol, point, normal, relaVel)
     ib:EnchantSkillCountUpdate()
 end
@@ -5037,5 +5158,9 @@ end
 function spellFireBall.OnEnchantSkillWithPlayer(ib, rb, thisCol, otherCol, point, normal, relaVel, character)
     ib:EnchantSkillCountUpdate()
 end
+
+-- =========================================================
+-- BASE CLASS BINDING
+-- =========================================================
 
 return Class(Require("LuaScript/WMD_SpellThrowScript"), nil, spellFireBall)
