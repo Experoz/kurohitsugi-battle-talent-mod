@@ -15,7 +15,7 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_Data:
     m_SerializedData: []
-  m_GUID: 71cfa210a03a7c945a003b7da1af1edf
+  m_GUID: a985c0ff89da6334ba897ddbfad54a52
   m_SerializeEntries:
   - m_GUID: 2984de54a2f121146a48075682699fe6
     m_Address: LuaScript/WMD_AvatarSoundPlayerScript
@@ -67,6 +67,98 @@ MonoBehaviour:
     m_SerializedLabels: []
   - m_GUID: a4883fa9c6528ae41a40863158f4795e
     m_Address: LuaScript/WMD_WeaponFlyObjBaseScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 55653c56c8432504f93e3f371b4d924c
+    m_Address: Entry
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: a75e060bf7953a74d9764b68250e06b4
+    m_Address: Config/EXP_Kurohitsugi_Gem_Info
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 52ade14ec4658e1458b42b9ec3d7c2e3
+    m_Address: Weapon/EXP_Kurohitsugi_Gem
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: acd33d75e4a50354caab8b7f8992ab59
+    m_Address: FlyObj/EZ_KurohitsugiExplosion
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 084990dd4c8ce824e9508fa5cdbb6482
+    m_Address: FlyObj/EZ_KurohitsugiFlyX
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 35a1b0e72eefb6c42b1b6dfd8f410f3b
+    m_Address: LuaScript/EXP_Kurohitsugi_GemScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 63b054e7498af86428ff174f83de17b7
+    m_Address: EZ_FlyKurohitsugiExplodeScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 1a0bc7156d3b00443993cf0501f07381
+    m_Address: LuaScript/EZ_FlyKurohitsugiScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 9b36a498b239e0245b04c6d0d1a6dd1b
+    m_Address: ICon/EXP_Kurohitsugi_Gem
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: a2bdd64041d547849bd4c405dcc3a75f
+    m_Address: LuaScript/WMD_EXP_Kurohitsugi_GemScript 1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 2274a21a43977c54489c4a8deab62439
+    m_Address: LuaScript/WMD_FlySlashScript 1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: c63be6ea78a3b654f8719e34e34abe1a
+    m_Address: KurohitsugiDamageBullet
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 4e872d86773994e46ae8a7f2196f8330
+    m_Address: LuaScript/WMD_KurohitsugiSequenceController
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 76425e2646a20b647b021ff9ca971ff8
+    m_Address: FlyObj/WMD_ElementBullet_Kurohitsugi
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 9b61051fbe5450b46bac6e5437bf5699
+    m_Address: FlyObj/EXP_Kurohitsugi_RainString
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 9fa55217ba60ac646ab41d21c565baf7
+    m_Address: Audio/Sound/WMD_Casting
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: f4973637b9bc4364981fccbdeb17a943
+    m_Address: Audio/Sound/WMD_Charge Hado90
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: ef0ffe42cb76c4c4e8586f48a50c5e19
+    m_Address: Audio/Sound/WMD_Creation
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 10b7170df33ae204797f2fdc6b267422
+    m_Address: Audio/Sound/WMD_Explosion
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 4bfcd8fdaa29f974fb3c3c865c4d07c4
+    m_Address: Audio/Sound/WMD_Hado 90-2
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 29774a23a75456647ad4058f2b183ef3
+    m_Address: Audio/Sound/WMD_Kurohitsugi 1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 406b400f09cd7af49ac0d5fa9e3d60c0
+    m_Address: Audio/Sound/WMD_Reiatsu
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 2f87d66c3c9da444491bcc13b3960e4f
+    m_Address: Audio/Sound/WMD_Scattering
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: f7094151ddc9f3f46bd225eda680346c
@@ -433,12 +525,36 @@ MonoBehaviour:
     m_Address: LuaScript/WMD_FlyFireBallScript
     m_ReadOnly: 0
     m_SerializedLabels: []
+  - m_GUID: d55c3bf6786260143b07697dec218e3a
+    m_Address: LuaScript/WMD_SpellFireBallScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
   - m_GUID: cd63ee547d293bb4bbddb3ababa07ac7
     m_Address: ICon/WMD_Spell_FireBall
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: cae43f3fd9c27c5429a4ad315aa82b37
     m_Address: Effect/WMD_BigExplosion
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 37b9cebb96243814588fc738565a6369
+    m_Address: Effect/WMD_FireBallElementState
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 095e2c66551345b41b555fb0f9c715d6
+    m_Address: Effect/WMD_FireEnchantEnd
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 1155871be5ca8b24bbdb03c6471fe8c1
+    m_Address: Effect/WMD_FireEnchanting
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: b71905b8de991a54f9953afa0b34caa2
+    m_Address: Effect/WMD_FireEnchantLoop
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: 47c7f4d22a6759043804d818f5b50783
+    m_Address: FlyObj/WMD_ElementBullet_FireBall
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: 2179585edb4fee24fa8ef8e98e5d4059
@@ -777,6 +893,14 @@ MonoBehaviour:
     m_Address: Role/WMD_SimpleRole
     m_ReadOnly: 0
     m_SerializedLabels: []
+  - m_GUID: d4f4f52bc8bf32543a79fc8f0322c538
+    m_Address: Character/BrokenArmor/WMD_Helmet
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: c176f1d17d725344fad3c92eaea35c13
+    m_Address: Character/ArmorProfile/WMD_SimpleArmorProfile
+    m_ReadOnly: 0
+    m_SerializedLabels: []
   - m_GUID: 20bd07d5de4f42948aa277b1465076af
     m_Address: ICon/WMD_SimpleCharacterSkin
     m_ReadOnly: 0
@@ -791,6 +915,10 @@ MonoBehaviour:
     m_SerializedLabels: []
   - m_GUID: fda3f3bca0d9e394f9c3fc1f8b33123c
     m_Address: LuaScript/WMD_EnemyGenScript
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+  - m_GUID: c840aed7842173a49a390130bc7ef4b1
+    m_Address: LuaScript/WMD_NetSceneInitScript
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: e7126875a388dbc449d842633e5c28c9
@@ -939,90 +1067,6 @@ MonoBehaviour:
     m_SerializedLabels: []
   - m_GUID: 737db93eed12209478fdfb1822d73328
     m_Address: Config/WMD_Wand_Flaming_Info
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 37b9cebb96243814588fc738565a6369
-    m_Address: Effect/WMD_FireBallElementState
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 47c7f4d22a6759043804d818f5b50783
-    m_Address: FlyObj/WMD_ElementBullet_FireBall
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: d55c3bf6786260143b07697dec218e3a
-    m_Address: LuaScript/WMD_SpellFireBallScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: b7e3df273b862924d873ca52b11fd77b
-    m_Address: Weapon/WMD_Bow_Magic
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 17c3e3488ed9f9f4895e027b57afb351
-    m_Address: FlyObj/WMD_FireBall
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 75ec0d47618cb0d4cbff7a401363e6e2
-    m_Address: LuaScript/WMD_BowMagicBaseScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: e42b237871690a14bb9a3ba57050273d
-    m_Address: LuaScript/WMD_ArrowPullerMagicScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: c93cf25f851b8794c88c0bc8eb1955d9
-    m_Address: Config/WMD_Bow_Magic_Info
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 3d3ade0ef70c224428e7d5f5757542d1
-    m_Address: ICon/WMD_Bow_Magic
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 52ade14ec4658e1458b42b9ec3d7c2e3
-    m_Address: Weapon/EXP_Kurohitsugi_Gem
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: a75e060bf7953a74d9764b68250e06b4
-    m_Address: Config/EXP_Kurohitsugi_Gem_Info
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 084990dd4c8ce824e9508fa5cdbb6482
-    m_Address: FlyObj/EZ_KurohitsugiFlyX
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 35a1b0e72eefb6c42b1b6dfd8f410f3b
-    m_Address: LuaScript/EXP_Kurohitsugi_GemScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 9b36a498b239e0245b04c6d0d1a6dd1b
-    m_Address: ICon/Hado_90
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: acd33d75e4a50354caab8b7f8992ab59
-    m_Address: FlyObj/EZ_KurohitsugiExplosion
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 1a0bc7156d3b00443993cf0501f07381
-    m_Address: LuaScript/EZ_FlyKurohitsugiScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 63b054e7498af86428ff174f83de17b7
-    m_Address: LuaScript/EZ_FlyKurohitsugiExplodeScript
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 76425e2646a20b647b021ff9ca971ff8
-    m_Address: FlyObj/EXP_ElementBullet_Kurohitsugi
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: c63be6ea78a3b654f8719e34e34abe1a
-    m_Address: KurohitsugiDamageBullet
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: 9b61051fbe5450b46bac6e5437bf5699
-    m_Address: FlyObj/EXP_Kurohitsugi_RainString
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-  - m_GUID: fd4e08a42c3be2e4eaf5feae3a03aa07
-    m_Address: EXP_Kurohitsugi_Gem_Icon
     m_ReadOnly: 0
     m_SerializedLabels: []
   m_ReadOnly: 0
