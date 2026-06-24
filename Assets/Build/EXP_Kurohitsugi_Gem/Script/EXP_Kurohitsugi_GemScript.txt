@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 8:
--- extract cast lock reset helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 9:
+-- extract gravity core reset helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2173,12 +2173,16 @@ function spellFireBall:ResetSequenceOneShotFlags()
     self.startedSecondRainPulse = false
 end
 
-function spellFireBall:ResetSequenceGravityRuntimeFlags()
+function spellFireBall:ResetGravityRuntimeCoreFlags()
     self.gravityZoneStarted = false
     self.gravityZoneEndTime = 0
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
+end
+
+function spellFireBall:ResetSequenceGravityRuntimeFlags()
+    self:ResetGravityRuntimeCoreFlags()
     self.spikeGroundShockWaveSpawned = false
 end
 
@@ -5000,11 +5004,7 @@ function spellFireBall:ResetKurohitsugiCast()
 
     self:ResetCastLock()
 
-    self.gravityZoneStarted = false
-    self.gravityZoneEndTime = 0
-    self.gravityZoneLastTick = 0
-    self.gravitySpikePushDone = false
-    self.gravityFinalSlamDone = false
+    self:ResetGravityRuntimeCoreFlags()
 
     self:StopChargeReiatsuBind()
     self.gripCancelWasPressed = false
