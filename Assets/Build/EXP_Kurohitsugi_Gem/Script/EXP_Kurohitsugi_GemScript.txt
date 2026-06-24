@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 2:
--- config/state subheaders only, no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 3:
+-- remove duplicated sequence-reiatsu flag reset only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2168,8 +2168,6 @@ function spellFireBall:ResetSequenceFlags()
     self.startedInnerDarkness = false
     self.startedGlowTransition = false
     self.stoppedGlowTransition = false
-    self.startedSequenceReiatsu = false
-    self.stoppedSequenceReiatsu = false
     self.startedSequenceReiatsu = false
     self.stoppedSequenceReiatsu = false
     self.startedFirstRainPulse = false
