@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 1:
--- section headers only, no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 2:
+-- config/state subheaders only, no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -12,17 +12,20 @@
 -- =========================================================
 
 local spellFireBall = {
+    -- Base spell fields inherited/fallback.
     enchantingEffect = "",
     enchantEffectFly = "",
     enchantEffectLoop = "",
     enchantEffectEnd = "",
 
+    -- Cached root references.
     palmPreviewRoot = nil,
     targetAreaRoot = nil,
     reiatsuVisualRoot = nil,
     castRoot = nil,
     sequenceRoot = nil,
 
+    -- Cached Kurohitsugi sequence roots.
     linesRoot = nil,
     wallsRoot = nil,
     topRoot = nil,
@@ -33,13 +36,16 @@ local spellFireBall = {
     glowTransitionRoot = nil,
     sequenceReiatsuRoot = nil,
 
+    -- Cached leaf references.
     previewCube = nil,
     targetArea = nil,
 
+    -- Targeting config.
     targetDistance = 4.5,
     targetHeightOffset = 0.04,
     castHeightOffset = 0,
 
+    -- Ground raycast config.
     -- Ground detection: appoggia target circle e castRoot al terreno reale.
     -- Serve soprattutto su scale, rampe e dislivelli, dove una Y fissa fa restare il Kurohitsugi sospeso o sotto terra.
     groundRayStartHeight = 8.0,
@@ -53,6 +59,7 @@ local spellFireBall = {
     groundMinNormalY = 0.55,
     groundFootprintRadius = 1.35,
 
+    -- Preview cube charge config.
     -- Preview cube charge animation recuperata dal commit 160a1c2.
     -- Parte piccolo durante il charge, cresce fino alla scala originale
     -- e ruota in modo vorticoso/disordinato su più assi.
@@ -70,24 +77,30 @@ local spellFireBall = {
     targetMoveMultiplier = 34.0,
     maxTargetMove = 9.0,
 
+    -- Runtime target tracking.
     startHandLocalPos = nil,
     startTargetPos = nil,
     lastTargetPos = nil,
 
+    -- Runtime player/scheduler references.
     playerTrans = nil,
     updateSchedId = nil,
     sequenceSchedId = nil,
 
+    -- Sequence runtime guards.
     -- Blocco anti-recast: evita che un nuovo cast resetti quello ancora attivo.
     isSequenceRunning = false,
     pendingCastBlocked = false,
 
+    -- Sequence runtime state.
     sequenceTimer = 0,
 
+    -- Locked cast transform.
     -- Blocco posizione cast
     castLockedPos = nil,
     castLockedRot = nil,
 
+    -- Main sequence timing config.
     -- Timing stile sequenza Unity/Inspector
     delayBeforeStart = 0.10,
 
@@ -129,6 +142,7 @@ local spellFireBall = {
     holdAfterSpikes = 1.00,
     spikeRetractDuration = 0.12,
 
+    -- Break pieces visual config.
     -- Frammentazione finale V6:
     -- i frammenti mesh si aprono e cadono in world space;
     -- la sensazione di "svanire nel pavimento" viene data soprattutto dagli Smoke_End_1/2,
@@ -143,11 +157,13 @@ local spellFireBall = {
     breakPiecesStartScaleMultiplier = 1.0,
     breakPiecesEndScaleMultiplier = 0.82,
 
+    -- Break smoke visual config.
     -- Smoke finale: non cambiamo il Particle System, muoviamo solo i transform Smoke_End_1 e Smoke_End_2.
     breakSmokeEndTargetLocalY = -4.5,
     breakSmokeEndStartDelay = 0.04,
     breakSmokeEndDuration = 1.20,
 
+    -- Gravity zone runtime/config.
     -- Gravity Zone Kurohitsugi
     gravityZoneStarted = false,
     gravityZoneEndTime = 0,
@@ -176,6 +192,7 @@ local spellFireBall = {
     gravitySpikeCenterForce = 8,
     gravitySpikeSlamForce = 26,
 
+    -- Spike shockwave config.
     -- Shockwave diretta sincronizzata con l'onda a terra delle spike.
     -- La visuale resta Explosion-Ring Down; niente FlyObj dedicato.
     -- Lo script applica direttamente effetto stile Stomp ai nemici nel raggio.
@@ -216,6 +233,7 @@ local spellFireBall = {
     gravityAffectObjects = true,
     gravityVelocityAssist = 0,
 
+    -- Direct slash damage config.
     -- Danno diretto interno del Kurohitsugi V3.
     -- Non dipende da rain/FlyObject, collider dei dardi o forza fisica.
     -- Usa prima l'HP/CharacterCombatAttr del target; l'hit-scan resta solo fallback opzionale.
@@ -234,6 +252,7 @@ local spellFireBall = {
     kurohitsugiSlashUsePhysicsUnits = true,
     kurohitsugiSlashStarted = false,
 
+    -- FlyObject rain config.
     -- FlyObject rain interno: soluzione consigliata per fare danni veri.
     -- IMPORTANTE: devi mettere qui il nome esatto del FlyObject della rapier/slash.
     -- Esempi possibili SOLO indicativi: "Weapon_ElementBullet_Rapier", "Weapon_FlySlash".
@@ -255,10 +274,12 @@ local spellFireBall = {
     kurohitsugiRainMaxPulseCount = 2,
     kurohitsugiRainTargetInwardMultiplier = 0.45,
 
+    -- Gravity target safety config.
     -- Filtro sicurezza: evita che la Gravity Zone tocchi player/mani/gemma,
     -- ma senza bloccare i nemici solo perché sono vicini al player.
     gravityMinDistanceFromPlayer = 0.35,
 
+    -- Charge Reiatsu bind config.
     -- Reiatsu Bind durante il charge:
     -- aura di pressione spirituale attorno al player, indipendente dalla zona di cast.
     -- V1 prudente: lavora solo sui logic target, non attira verso il player e non tocca oggetti fisici secondari.
@@ -318,6 +339,7 @@ local spellFireBall = {
     -- Evita che cadaveri/ragdoll già morti vengano ripresi dalla pressione e volino in assenza di gravità.
     chargeReiatsuSkipLikelyDead = true,
 
+    -- Grip cancel config.
     -- Grip cancel: mentre il trigger sta caricando il Kurohitsugi,
     -- una nuova pressione del grip annulla preview, target area e Reiatsu senza castare.
     gripCancelEnabled = true,
@@ -330,6 +352,7 @@ local spellFireBall = {
     gripCancelDebugInterval = 0.35,
     gripCancelNextDebugTime = 0,
 
+    -- Grip-only Reiatsu config.
     -- Grip Reiatsu Only V2:
     -- modalità separata: Grip senza Trigger = solo Spiritual Pressure dedicata.
     -- Nota: NON salva una mano da OnGrab, per non rompere il Grip Cancel già funzionante.
@@ -342,6 +365,7 @@ local spellFireBall = {
     gripReiatsuOnlyNextDebugTime = 0,
     gripReiatsuRoot = nil,
 
+    -- Sequence boolean flags.
     startedEffects = false,
     startedSpikes = false,
     retractedSpikes = false,
@@ -354,6 +378,7 @@ local spellFireBall = {
     startedFirstRainPulse = false,
     startedSecondRainPulse = false,
 
+    -- Calculated sequence timestamps.
     linesStartTime = 0,
     topLinesStartTime = 0,
     wallsStartTime = 0,
@@ -367,6 +392,7 @@ local spellFireBall = {
     breakPiecesTime = 0,
     hideTime = 0,
 
+    -- Cached animation data.
     lineData = nil,
     wallData = nil,
     topData = nil,
@@ -374,6 +400,7 @@ local spellFireBall = {
     breakPieceData = nil,
     breakSmokeEndData = nil,
 
+    -- Line dissolve config.
     -- Kurohitsugi line dissolve material control.
     -- Stessa logica delle pareti, ma con range leggermente più contenuto:
     -- le linee sono sottili e devono sembrare "disegnate" dal reiatsu, non bucarsi troppo.
@@ -382,6 +409,7 @@ local spellFireBall = {
     lineDissolveHiddenAmount = -0.20,
     lineDissolveVisibleAmount = 1.10,
 
+    -- Wall dissolve config.
     -- Kurohitsugi wall dissolve material control.
     -- Fase 1: tutte le pareti arrivano al reveal pieno.
     -- Fase 2: dopo la materializzazione, i gruppi si assestano su valori diversi:
@@ -411,12 +439,14 @@ local spellFireBall = {
     -- Nome del gruppo secondario dentro WallsRoot.
     wallLowerLayerRootName = "Walls_LowerLayerRoot",
 
+    -- Top dissolve config.
     -- Preparazione futura: il top avrà un dissolve dedicato radiale/quadrato, separato dalle pareti.
     topDissolveRenderers = nil,
     topDissolveProperty = "_DissolveAmount",
     topDissolveHiddenAmount = -0.25,
     topDissolveVisibleAmount = 1.20,
 
+    -- Visual data cache guard.
     -- Evita che dal secondo cast vengano salvate scale già modificate
     visualDataCached = false,
 }
