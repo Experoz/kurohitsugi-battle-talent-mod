@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 4:
--- extract sequence one-shot flag reset helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 5:
+-- extract sequence runtime reset helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2173,26 +2173,33 @@ function spellFireBall:ResetSequenceOneShotFlags()
     self.startedSecondRainPulse = false
 end
 
-function spellFireBall:ResetSequenceFlags()
-    self.sequenceTimer = 0
-    self:ResetSequenceOneShotFlags()
-
+function spellFireBall:ResetSequenceGravityRuntimeFlags()
     self.gravityZoneStarted = false
     self.gravityZoneEndTime = 0
     self.gravityZoneLastTick = 0
     self.gravitySpikePushDone = false
     self.gravityFinalSlamDone = false
     self.spikeGroundShockWaveSpawned = false
+end
+
+function spellFireBall:ResetSequenceDamageRuntimeState()
+    self.kurohitsugiSlashLastPulseTime = -999
+    self.kurohitsugiSlashStarted = false
+    self.kurohitsugiRainLastPulseTime = -999
+    self.kurohitsugiRainPulseIndex = 0
+end
+
+function spellFireBall:ResetSequenceFlags()
+    self.sequenceTimer = 0
+    self:ResetSequenceOneShotFlags()
+    self:ResetSequenceGravityRuntimeFlags()
 
     -- Non resettiamo chargeReiatsuActive qui:
     -- dopo il release deve poter continuare per i primi istanti della sequenza,
     -- fino alla fine delle linee / inizio pareti.
     -- Lo stop reale avviene in StopSequenceReiatsuContinuity() o HideKurohitsugiCastAll().
 
-    self.kurohitsugiSlashLastPulseTime = -999
-    self.kurohitsugiSlashStarted = false
-    self.kurohitsugiRainLastPulseTime = -999
-    self.kurohitsugiRainPulseIndex = 0
+    self:ResetSequenceDamageRuntimeState()
 end
 
 function spellFireBall:SetKurohitsugiInitialVisualState()
