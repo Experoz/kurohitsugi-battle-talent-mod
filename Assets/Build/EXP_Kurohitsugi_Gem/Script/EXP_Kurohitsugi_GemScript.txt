@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 23 block:
--- extract runtime effects update helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 24 block:
+-- extract sequence lifecycle and cast root helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -5036,6 +5036,39 @@ end
 -- SEQUENCE START / CAST RESET / CAST EXECUTION
 -- =========================================================
 
+function spellFireBall:StartSequenceUpdateScheduler()
+    local owner = self
+
+    self.sequenceSchedId = CL.Scheduler.Create({},
+        function()
+            if owner ~= nil then
+                owner:UpdateKurohitsugiSequence()
+            end
+        end,
+    0, -1).actionId
+end
+
+function spellFireBall:ResetCastRootToHand()
+    if self.castRoot ~= nil then
+        self.castRoot:SetParent(self.trans, true)
+        self.castRoot.gameObject:SetActive(false)
+
+        self.castRoot.localPosition = UE.Vector3.zero
+        self.castRoot.localRotation = UE.Quaternion.identity
+    end
+end
+
+function spellFireBall:PrepareCastRootAtPosition(pos)
+    self.castRoot:SetParent(nil, true)
+
+    self.castRoot.position = pos
+    self.castRoot.rotation = UE.Quaternion.identity
+    self.castRoot.gameObject:SetActive(true)
+
+    self.castLockedPos = UE.Vector3(pos.x, pos.y, pos.z)
+    self.castLockedRot = UE.Quaternion.identity
+end
+
 function spellFireBall:StartKurohitsugiSequence()
     if self.isSequenceRunning then
         print("KUROHITSUGI BLOCKED - sequence already running")
@@ -5048,16 +5081,7 @@ function spellFireBall:StartKurohitsugiSequence()
     self:StopKurohitsugiSequence()
     self:SetKurohitsugiInitialVisualState()
     self:StartSequenceReiatsuContinuity()
-
-    local owner = self
-
-    self.sequenceSchedId = CL.Scheduler.Create({},
-        function()
-            if owner ~= nil then
-                owner:UpdateKurohitsugiSequence()
-            end
-        end,
-    0, -1).actionId
+    self:StartSequenceUpdateScheduler()
 end
 
 function spellFireBall:ResetKurohitsugiCast()
@@ -5088,13 +5112,7 @@ function spellFireBall:ResetKurohitsugiCast()
     self.startedGlowTransition = false
     self.stoppedGlowTransition = false
 
-    if self.castRoot ~= nil then
-        self.castRoot:SetParent(self.trans, true)
-        self.castRoot.gameObject:SetActive(false)
-
-        self.castRoot.localPosition = UE.Vector3.zero
-        self.castRoot.localRotation = UE.Quaternion.identity
-    end
+    self:ResetCastRootToHand()
 
     self:SetKurohitsugiInitialVisualState()
 end
@@ -5121,14 +5139,7 @@ function spellFireBall:CastKurohitsugiAtTarget()
     local pos = UE.Vector3(self.lastTargetPos.x, self.lastTargetPos.y, self.lastTargetPos.z)
     pos = self:GetGroundedPosition(pos, self.castHeightOffset)
 
-    self.castRoot:SetParent(nil, true)
-
-    self.castRoot.position = pos
-    self.castRoot.rotation = UE.Quaternion.identity
-    self.castRoot.gameObject:SetActive(true)
-
-    self.castLockedPos = UE.Vector3(pos.x, pos.y, pos.z)
-    self.castLockedRot = UE.Quaternion.identity
+    self:PrepareCastRootAtPosition(pos)
 
     self:StartKurohitsugiSequence()
 
