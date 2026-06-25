@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 22 block:
--- extract coffin formation phase update helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 23 block:
+-- extract runtime effects update helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4998,15 +4998,7 @@ function spellFireBall:UpdateBreakPiecesPhase()
     end
 end
 
-function spellFireBall:UpdateKurohitsugiSequence()
-    self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
-
-    self:LockCastTransform()
-
-    self:UpdateSequenceReiatsuContinuity()
-
-    self:UpdateCoffinFormationPhase()
-
+function spellFireBall:UpdateSequenceRuntimeEffects()
     -- La gravity zone parte dopo le linee + delay extra, così non si vede troppo presto prima dei muri.
     if self.sequenceTimer >= self:GetGravityStartTime() and not self.gravityZoneStarted and not self.gravityFinalSlamDone then
         self:StartKurohitsugiGravityZone()
@@ -5018,6 +5010,18 @@ function spellFireBall:UpdateKurohitsugiSequence()
     self:UpdateFirstRainPulseAfterCubeComplete()
     self:UpdateGlowTransition()
     self:UpdateSecondRainPulseWithGlow()
+end
+
+function spellFireBall:UpdateKurohitsugiSequence()
+    self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
+
+    self:LockCastTransform()
+
+    self:UpdateSequenceReiatsuContinuity()
+
+    self:UpdateCoffinFormationPhase()
+
+    self:UpdateSequenceRuntimeEffects()
 
     self:UpdateSpikesPhase()
     self:UpdateSpikeRetractPhase()
