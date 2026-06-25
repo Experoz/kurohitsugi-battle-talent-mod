@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 10:
--- extract particle stop/hide visual helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 11:
+-- reuse particle stop/hide helper in initial visual state only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2234,11 +2234,9 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     SetActive(self.effectsRoot, false)
     SetActive(self.breakPiecesRoot, false)
     SetActive(self.innerDarknessRoot, false)
-    StopParticleSystemsInRoot(self.glowTransitionRoot)
-    SetActive(self.glowTransitionRoot, false)
+    StopAndHideParticleRoot(self.glowTransitionRoot)
 
-    StopParticleSystemsInRoot(self.sequenceReiatsuRoot)
-    SetActive(self.sequenceReiatsuRoot, false)
+    StopAndHideParticleRoot(self.sequenceReiatsuRoot)
 
     if self.spikesRoot ~= nil then
         self.spikesRoot.gameObject:SetActive(true)
