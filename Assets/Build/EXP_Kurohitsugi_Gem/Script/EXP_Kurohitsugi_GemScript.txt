@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 18 block:
--- extract initial visual reset helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 19 block:
+-- extract initial cache/dissolve setup helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -1566,6 +1566,19 @@ function spellFireBall:ResetInitialBreakPieceVisuals()
     end
 end
 
+function spellFireBall:PrepareInitialSequenceVisualCaches()
+    self:CalculateSequenceTimes()
+    self:CacheVisualData()
+    self:CacheLineDissolveRenderers()
+    self:SetLineDissolveAmount(self.lineDissolveHiddenAmount)
+    self:CacheWallDissolveRenderers()
+    self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
+
+    -- Preparazione futura per il top dissolve radiale: per ora non cambia il comportamento se il top non usa quello shader.
+    self:CacheTopDissolveRenderers()
+    self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
+end
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     self:SetPreviewRootsActive(true)
@@ -2316,16 +2329,7 @@ end
 
 function spellFireBall:SetKurohitsugiInitialVisualState()
     self:FindKurohitsugiObjects()
-    self:CalculateSequenceTimes()
-    self:CacheVisualData()
-    self:CacheLineDissolveRenderers()
-    self:SetLineDissolveAmount(self.lineDissolveHiddenAmount)
-    self:CacheWallDissolveRenderers()
-    self:SetWallDissolveAmount(self.wallDissolveHiddenAmount)
-
-    -- Preparazione futura per il top dissolve radiale: per ora non cambia il comportamento se il top non usa quello shader.
-    self:CacheTopDissolveRenderers()
-    self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
+    self:PrepareInitialSequenceVisualCaches()
 
     self:SetCoffinStructureRootsActive(true)
 
