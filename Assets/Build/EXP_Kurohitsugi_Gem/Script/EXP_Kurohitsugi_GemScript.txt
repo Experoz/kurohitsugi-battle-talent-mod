@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 19 block:
--- extract initial cache/dissolve setup helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 20 block:
+-- extract sequence phase start helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4888,6 +4888,56 @@ end
 -- MAIN SEQUENCE UPDATE
 -- =========================================================
 
+function spellFireBall:StartSpikesPhase()
+    self.startedSpikes = true
+
+    if self.spikesRoot ~= nil then
+        self.spikesRoot.gameObject:SetActive(true)
+    end
+
+    -- Push controllato sincronizzato con l'uscita delle spike.
+    -- La shockwave fisica viene spawnata dentro ApplyGravitySpikePush(),
+    -- così parte nello stesso momento del push e non viene chiamata due volte.
+    self:ApplyGravitySpikePush()
+
+    -- Primo pulse immediato di danno interno stile slash.
+    self.kurohitsugiSlashLastPulseTime = -999
+    self:ApplyKurohitsugiSlashDamagePulse()
+
+    -- La rain non parte più con le spike: ora è controllata da
+    -- UpdateFirstRainPulseAfterCubeComplete() e UpdateSecondRainPulseWithGlow().
+end
+
+function spellFireBall:StartSpikeRetractPhase()
+    self.retractedSpikes = true
+
+    if self.spikesRoot ~= nil then
+        self.spikesRoot.gameObject:SetActive(true)
+    end
+end
+
+function spellFireBall:StartBreakPiecesPhase()
+    self.startedBreakPieces = true
+
+    -- Slam sincronizzato con la frantumazione: se la zona non è già finita, lo forziamo qui.
+    self:ApplyGravityZoneFinalSlam()
+
+    SetActive(self.linesRoot, false)
+    SetActive(self.wallsRoot, false)
+    SetActive(self.topRoot, false)
+    SetActive(self.innerDarknessRoot, false)
+    self:StopGlowTransition()
+
+    if self.spikesRoot ~= nil then
+        SetChildrenActive(self.spikesRoot, false)
+        self.spikesRoot.gameObject:SetActive(false)
+    end
+
+    self:DisableLegacyBreakPieces()
+    self:ResetBreakSmokeEndPositions()
+    ShowAndPlayParticleRoot(self.breakPiecesRoot)
+end
+
 function spellFireBall:UpdateKurohitsugiSequence()
     self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
 
@@ -4929,23 +4979,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
 
     if self.sequenceTimer >= self.spikesTime and self.sequenceTimer < self.spikeRetractTime then
         if not self.startedSpikes then
-            self.startedSpikes = true
-
-            if self.spikesRoot ~= nil then
-                self.spikesRoot.gameObject:SetActive(true)
-            end
-
-            -- Push controllato sincronizzato con l'uscita delle spike.
-            -- La shockwave fisica viene spawnata dentro ApplyGravitySpikePush(),
-            -- così parte nello stesso momento del push e non viene chiamata due volte.
-            self:ApplyGravitySpikePush()
-
-            -- Primo pulse immediato di danno interno stile slash.
-            self.kurohitsugiSlashLastPulseTime = -999
-            self:ApplyKurohitsugiSlashDamagePulse()
-
-            -- La rain non parte più con le spike: ora è controllata da
-            -- UpdateFirstRainPulseAfterCubeComplete() e UpdateSecondRainPulseWithGlow().
+            self:StartSpikesPhase()
         end
 
         self:AnimateSpikesGrow()
@@ -4953,11 +4987,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
 
     if self.sequenceTimer >= self.spikeRetractTime and self.sequenceTimer < self.breakPiecesTime then
         if not self.retractedSpikes then
-            self.retractedSpikes = true
-
-            if self.spikesRoot ~= nil then
-                self.spikesRoot.gameObject:SetActive(true)
-            end
+            self:StartSpikeRetractPhase()
         end
 
         self:AnimateSpikesRetract()
@@ -4965,25 +4995,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
 
     if self.sequenceTimer >= self.breakPiecesTime and self.sequenceTimer < self.hideTime then
         if not self.startedBreakPieces then
-            self.startedBreakPieces = true
-
-            -- Slam sincronizzato con la frantumazione: se la zona non è già finita, lo forziamo qui.
-            self:ApplyGravityZoneFinalSlam()
-
-            SetActive(self.linesRoot, false)
-            SetActive(self.wallsRoot, false)
-            SetActive(self.topRoot, false)
-            SetActive(self.innerDarknessRoot, false)
-            self:StopGlowTransition()
-
-            if self.spikesRoot ~= nil then
-                SetChildrenActive(self.spikesRoot, false)
-                self.spikesRoot.gameObject:SetActive(false)
-            end
-
-            self:DisableLegacyBreakPieces()
-            self:ResetBreakSmokeEndPositions()
-            ShowAndPlayParticleRoot(self.breakPiecesRoot)
+            self:StartBreakPiecesPhase()
         end
 
         self:AnimateBreakPieces()
