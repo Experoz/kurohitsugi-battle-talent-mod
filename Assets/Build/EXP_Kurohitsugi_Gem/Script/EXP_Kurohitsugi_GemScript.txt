@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 17 block:
--- extract visual root group helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 18 block:
+-- extract initial visual reset helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -1484,6 +1484,88 @@ function spellFireBall:SetCastEffectRootsActive(active)
     SetActive(self.innerDarknessRoot, active)
 end
 
+function spellFireBall:ResetInitialLineVisuals()
+    if self.lineData == nil then return end
+
+    for i = 1, #self.lineData do
+        local d = self.lineData[i]
+        local tr = d.trans
+
+        tr.gameObject:SetActive(true)
+        tr.localRotation = d.rot
+
+        if d.vertical then
+            tr.localScale = UE.Vector3(d.scale.x, 0.01, d.scale.z)
+            tr.localPosition = UE.Vector3(d.pos.x, 0.005, d.pos.z)
+        else
+            tr.localScale = GetHiddenTopLineScale(d.scale)
+            tr.localPosition = d.pos
+        end
+    end
+end
+
+function spellFireBall:ResetInitialWallVisuals()
+    if self.wallData == nil then return end
+
+    for i = 1, #self.wallData do
+        local d = self.wallData[i]
+        local tr = d.trans
+
+        tr.gameObject:SetActive(true)
+        tr.localRotation = d.rot
+        tr.localScale = UE.Vector3(d.scale.x, 0.01, d.scale.z)
+        tr.localPosition = UE.Vector3(d.pos.x, 0.005, d.pos.z)
+    end
+end
+
+function spellFireBall:ResetInitialTopVisuals()
+    if self.topData == nil then return end
+
+    for i = 1, #self.topData do
+        local d = self.topData[i]
+        local tr = d.trans
+
+        tr.gameObject:SetActive(true)
+        tr.localRotation = d.rot
+        tr.localScale = UE.Vector3(d.scale.x * 0.05, d.scale.y, d.scale.z * 0.05)
+        tr.localPosition = d.pos
+    end
+end
+
+function spellFireBall:ResetInitialSpikeVisuals()
+    if self.spikeData == nil then return end
+
+    for i = 1, #self.spikeData do
+        local d = self.spikeData[i]
+        local tr = d.trans
+
+        tr.gameObject:SetActive(false)
+        tr.localPosition = d.pos
+        tr.localRotation = d.rot
+        tr.localScale = GetHiddenSpikeScale(d.scale)
+    end
+end
+
+function spellFireBall:ResetInitialBreakPieceVisuals()
+    self:DisableLegacyBreakPieces()
+
+    if self.breakPieceData == nil then return end
+
+    for i = 1, #self.breakPieceData do
+        local d = self.breakPieceData[i]
+        local tr = d.trans
+
+        if d.container ~= nil then
+            d.container.gameObject:SetActive(true)
+        end
+
+        tr.gameObject:SetActive(false)
+        tr.localPosition = d.pos
+        tr.localRotation = d.rot
+        tr.localScale = d.scale * self.breakPiecesStartScaleMultiplier
+    end
+end
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     self:SetPreviewRootsActive(true)
@@ -2256,77 +2338,11 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
         self.spikesRoot.gameObject:SetActive(true)
     end
 
-    if self.lineData ~= nil then
-        for i = 1, #self.lineData do
-            local d = self.lineData[i]
-            local tr = d.trans
-
-            tr.gameObject:SetActive(true)
-            tr.localRotation = d.rot
-
-            if d.vertical then
-                tr.localScale = UE.Vector3(d.scale.x, 0.01, d.scale.z)
-                tr.localPosition = UE.Vector3(d.pos.x, 0.005, d.pos.z)
-            else
-                tr.localScale = GetHiddenTopLineScale(d.scale)
-                tr.localPosition = d.pos
-            end
-        end
-    end
-
-    if self.wallData ~= nil then
-        for i = 1, #self.wallData do
-            local d = self.wallData[i]
-            local tr = d.trans
-
-            tr.gameObject:SetActive(true)
-            tr.localRotation = d.rot
-            tr.localScale = UE.Vector3(d.scale.x, 0.01, d.scale.z)
-            tr.localPosition = UE.Vector3(d.pos.x, 0.005, d.pos.z)
-        end
-    end
-
-    if self.topData ~= nil then
-        for i = 1, #self.topData do
-            local d = self.topData[i]
-            local tr = d.trans
-
-            tr.gameObject:SetActive(true)
-            tr.localRotation = d.rot
-            tr.localScale = UE.Vector3(d.scale.x * 0.05, d.scale.y, d.scale.z * 0.05)
-            tr.localPosition = d.pos
-        end
-    end
-
-    if self.spikeData ~= nil then
-        for i = 1, #self.spikeData do
-            local d = self.spikeData[i]
-            local tr = d.trans
-
-            tr.gameObject:SetActive(false)
-            tr.localPosition = d.pos
-            tr.localRotation = d.rot
-            tr.localScale = GetHiddenSpikeScale(d.scale)
-        end
-    end
-
-    self:DisableLegacyBreakPieces()
-
-    if self.breakPieceData ~= nil then
-        for i = 1, #self.breakPieceData do
-            local d = self.breakPieceData[i]
-            local tr = d.trans
-
-            if d.container ~= nil then
-                d.container.gameObject:SetActive(true)
-            end
-
-            tr.gameObject:SetActive(false)
-            tr.localPosition = d.pos
-            tr.localRotation = d.rot
-            tr.localScale = d.scale * self.breakPiecesStartScaleMultiplier
-        end
-    end
+    self:ResetInitialLineVisuals()
+    self:ResetInitialWallVisuals()
+    self:ResetInitialTopVisuals()
+    self:ResetInitialSpikeVisuals()
+    self:ResetInitialBreakPieceVisuals()
 
     self:ResetBreakSmokeEndPositions()
 
