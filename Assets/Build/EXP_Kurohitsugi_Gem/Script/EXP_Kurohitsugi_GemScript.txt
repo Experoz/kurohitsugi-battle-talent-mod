@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 16:
--- extract preview roots visibility helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 17 block:
+-- extract visual root group helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -1472,6 +1472,18 @@ function spellFireBall:SetPreviewRootsActive(active)
     SetActive(self.targetAreaRoot, active)
 end
 
+function spellFireBall:SetCoffinStructureRootsActive(active)
+    SetActive(self.linesRoot, active)
+    SetActive(self.wallsRoot, active)
+    SetActive(self.topRoot, active)
+end
+
+function spellFireBall:SetCastEffectRootsActive(active)
+    SetActive(self.effectsRoot, active)
+    SetActive(self.breakPiecesRoot, active)
+    SetActive(self.innerDarknessRoot, active)
+end
+
 function spellFireBall:ShowKurohitsugiPreview()
     self:FindKurohitsugiObjects()
     self:SetPreviewRootsActive(true)
@@ -2233,13 +2245,9 @@ function spellFireBall:SetKurohitsugiInitialVisualState()
     self:CacheTopDissolveRenderers()
     self:SetTopDissolveAmount(self.topDissolveHiddenAmount)
 
-    SetActive(self.linesRoot, true)
-    SetActive(self.wallsRoot, true)
-    SetActive(self.topRoot, true)
+    self:SetCoffinStructureRootsActive(true)
 
-    SetActive(self.effectsRoot, false)
-    SetActive(self.breakPiecesRoot, false)
-    SetActive(self.innerDarknessRoot, false)
+    self:SetCastEffectRootsActive(false)
     StopAndHideParticleRoot(self.glowTransitionRoot)
 
     StopAndHideParticleRoot(self.sequenceReiatsuRoot)
@@ -2329,12 +2337,8 @@ function spellFireBall:HideKurohitsugiCastAll()
     self:StopKurohitsugiSequence()
     self:FindKurohitsugiObjects()
 
-    SetActive(self.linesRoot, false)
-    SetActive(self.wallsRoot, false)
-    SetActive(self.topRoot, false)
-    SetActive(self.effectsRoot, false)
-    SetActive(self.breakPiecesRoot, false)
-    SetActive(self.innerDarknessRoot, false)
+    self:SetCoffinStructureRootsActive(false)
+    self:SetCastEffectRootsActive(false)
     StopAndHideParticleRoot(self.glowTransitionRoot)
 
     StopAndHideParticleRoot(self.sequenceReiatsuRoot)
