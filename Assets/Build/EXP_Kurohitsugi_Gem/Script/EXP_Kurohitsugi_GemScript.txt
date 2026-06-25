@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 20 block:
--- extract sequence phase start helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 21 block:
+-- extract sequence phase update helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4938,6 +4938,36 @@ function spellFireBall:StartBreakPiecesPhase()
     ShowAndPlayParticleRoot(self.breakPiecesRoot)
 end
 
+function spellFireBall:UpdateSpikesPhase()
+    if self.sequenceTimer >= self.spikesTime and self.sequenceTimer < self.spikeRetractTime then
+        if not self.startedSpikes then
+            self:StartSpikesPhase()
+        end
+
+        self:AnimateSpikesGrow()
+    end
+end
+
+function spellFireBall:UpdateSpikeRetractPhase()
+    if self.sequenceTimer >= self.spikeRetractTime and self.sequenceTimer < self.breakPiecesTime then
+        if not self.retractedSpikes then
+            self:StartSpikeRetractPhase()
+        end
+
+        self:AnimateSpikesRetract()
+    end
+end
+
+function spellFireBall:UpdateBreakPiecesPhase()
+    if self.sequenceTimer >= self.breakPiecesTime and self.sequenceTimer < self.hideTime then
+        if not self.startedBreakPieces then
+            self:StartBreakPiecesPhase()
+        end
+
+        self:AnimateBreakPieces()
+    end
+end
+
 function spellFireBall:UpdateKurohitsugiSequence()
     self.sequenceTimer = self.sequenceTimer + UE.Time.deltaTime
 
@@ -4977,29 +5007,9 @@ function spellFireBall:UpdateKurohitsugiSequence()
     self:UpdateGlowTransition()
     self:UpdateSecondRainPulseWithGlow()
 
-    if self.sequenceTimer >= self.spikesTime and self.sequenceTimer < self.spikeRetractTime then
-        if not self.startedSpikes then
-            self:StartSpikesPhase()
-        end
-
-        self:AnimateSpikesGrow()
-    end
-
-    if self.sequenceTimer >= self.spikeRetractTime and self.sequenceTimer < self.breakPiecesTime then
-        if not self.retractedSpikes then
-            self:StartSpikeRetractPhase()
-        end
-
-        self:AnimateSpikesRetract()
-    end
-
-    if self.sequenceTimer >= self.breakPiecesTime and self.sequenceTimer < self.hideTime then
-        if not self.startedBreakPieces then
-            self:StartBreakPiecesPhase()
-        end
-
-        self:AnimateBreakPieces()
-    end
+    self:UpdateSpikesPhase()
+    self:UpdateSpikeRetractPhase()
+    self:UpdateBreakPiecesPhase()
 
     if self.sequenceTimer >= self.hideTime then
         self:HideKurohitsugiCastAll()
