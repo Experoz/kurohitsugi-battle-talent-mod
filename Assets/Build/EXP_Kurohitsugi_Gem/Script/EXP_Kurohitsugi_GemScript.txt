@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 12:
--- reuse particle stop/hide helper in cast cleanup only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 13:
+-- reuse particle stop/hide helper in runtime stop functions only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4766,8 +4766,7 @@ function spellFireBall:StopSequenceReiatsuContinuity()
 
     self.stoppedSequenceReiatsu = true
 
-    StopParticleSystemsInRoot(self.sequenceReiatsuRoot)
-    SetActive(self.sequenceReiatsuRoot, false)
+    StopAndHideParticleRoot(self.sequenceReiatsuRoot)
 
     self:StopChargeReiatsuBind()
 
@@ -4813,8 +4812,7 @@ function spellFireBall:StopGlowTransition()
 
     self.stoppedGlowTransition = true
 
-    StopParticleSystemsInRoot(self.glowTransitionRoot)
-    SetActive(self.glowTransitionRoot, false)
+    StopAndHideParticleRoot(self.glowTransitionRoot)
 
     print("KUROHITSUGI TEST - Glow transition stopped")
 end
