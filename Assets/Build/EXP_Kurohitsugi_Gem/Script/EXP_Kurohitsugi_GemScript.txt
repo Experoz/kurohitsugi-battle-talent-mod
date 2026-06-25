@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 9:
--- extract gravity core reset helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 10:
+-- extract particle stop/hide visual helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -508,6 +508,11 @@ local function StopParticleSystemsInRoot(root)
             end
         end
     end)
+end
+
+local function StopAndHideParticleRoot(root)
+    StopParticleSystemsInRoot(root)
+    SetActive(root, false)
 end
 
 local function SafeSetRendererMaterialFloat(renderer, propertyName, value)
@@ -1408,8 +1413,7 @@ end
 function spellFireBall:HideReiatsuVisual()
     self:FindKurohitsugiObjects()
 
-    StopParticleSystemsInRoot(self.reiatsuVisualRoot)
-    SetActive(self.reiatsuVisualRoot, false)
+    StopAndHideParticleRoot(self.reiatsuVisualRoot)
 
     print("KUROHITSUGI TEST - Reiatsu visual hidden")
 end
@@ -1451,8 +1455,7 @@ end
 function spellFireBall:HideGripReiatsuVisual()
     self:FindKurohitsugiObjects()
 
-    StopParticleSystemsInRoot(self.gripReiatsuRoot)
-    SetActive(self.gripReiatsuRoot, false)
+    StopAndHideParticleRoot(self.gripReiatsuRoot)
 
     print("KUROHITSUGI TEST - Grip Reiatsu visual hidden")
 end
