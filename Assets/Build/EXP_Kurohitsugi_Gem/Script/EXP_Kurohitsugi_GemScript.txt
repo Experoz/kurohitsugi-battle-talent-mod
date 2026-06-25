@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 21 block:
--- extract sequence phase update helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 22 block:
+-- extract coffin formation phase update helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4888,6 +4888,36 @@ end
 -- MAIN SEQUENCE UPDATE
 -- =========================================================
 
+function spellFireBall:StartInnerDarknessPhase()
+    self.startedInnerDarkness = true
+    SetActive(self.innerDarknessRoot, true)
+end
+
+function spellFireBall:StartEffectsPhase()
+    self.startedEffects = true
+    SetActive(self.effectsRoot, true)
+end
+
+function spellFireBall:UpdateCoffinFormationPhase()
+    self:AnimateLines()
+
+    if self.sequenceTimer >= self.wallsStartTime then
+        self:AnimateWalls()
+    end
+
+    if self.sequenceTimer >= self:GetInnerDarknessStartTime() and not self.startedInnerDarkness then
+        self:StartInnerDarknessPhase()
+    end
+
+    if self.sequenceTimer >= self.topStartTime then
+        self:AnimateTop()
+    end
+
+    if self.sequenceTimer >= self.effectsTime and not self.startedEffects then
+        self:StartEffectsPhase()
+    end
+end
+
 function spellFireBall:StartSpikesPhase()
     self.startedSpikes = true
 
@@ -4975,25 +5005,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
 
     self:UpdateSequenceReiatsuContinuity()
 
-    self:AnimateLines()
-
-    if self.sequenceTimer >= self.wallsStartTime then
-        self:AnimateWalls()
-    end
-
-    if self.sequenceTimer >= self:GetInnerDarknessStartTime() and not self.startedInnerDarkness then
-        self.startedInnerDarkness = true
-        SetActive(self.innerDarknessRoot, true)
-    end
-
-    if self.sequenceTimer >= self.topStartTime then
-        self:AnimateTop()
-    end
-
-    if self.sequenceTimer >= self.effectsTime and not self.startedEffects then
-        self.startedEffects = true
-        SetActive(self.effectsRoot, true)
-    end
+    self:UpdateCoffinFormationPhase()
 
     -- La gravity zone parte dopo le linee + delay extra, così non si vede troppo presto prima dei muri.
     if self.sequenceTimer >= self:GetGravityStartTime() and not self.gravityZoneStarted and not self.gravityFinalSlamDone then
