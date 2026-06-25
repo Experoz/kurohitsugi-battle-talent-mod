@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 14:
--- extract particle show/play helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 15:
+-- reuse particle show/play helper for break pieces only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -4956,8 +4956,7 @@ function spellFireBall:UpdateKurohitsugiSequence()
 
             self:DisableLegacyBreakPieces()
             self:ResetBreakSmokeEndPositions()
-            SetActive(self.breakPiecesRoot, true)
-            PlayParticleSystemsInRoot(self.breakPiecesRoot)
+            ShowAndPlayParticleRoot(self.breakPiecesRoot)
         end
 
         self:AnimateBreakPieces()
