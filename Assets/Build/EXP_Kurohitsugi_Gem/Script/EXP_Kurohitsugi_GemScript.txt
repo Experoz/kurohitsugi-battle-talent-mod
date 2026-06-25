@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 13:
--- reuse particle stop/hide helper in runtime stop functions only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 14:
+-- extract particle show/play helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -513,6 +513,11 @@ end
 local function StopAndHideParticleRoot(root)
     StopParticleSystemsInRoot(root)
     SetActive(root, false)
+end
+
+local function ShowAndPlayParticleRoot(root)
+    SetActive(root, true)
+    PlayParticleSystemsInRoot(root)
 end
 
 local function SafeSetRendererMaterialFloat(renderer, propertyName, value)
@@ -1404,8 +1409,7 @@ function spellFireBall:ShowReiatsuVisual()
 
     self:UpdateReiatsuVisual()
 
-    SetActive(self.reiatsuVisualRoot, true)
-    PlayParticleSystemsInRoot(self.reiatsuVisualRoot)
+    ShowAndPlayParticleRoot(self.reiatsuVisualRoot)
 
     print("KUROHITSUGI TEST - Reiatsu visual shown")
 end
@@ -1446,8 +1450,7 @@ function spellFireBall:ShowGripReiatsuVisual()
 
     self:UpdateGripReiatsuVisual()
 
-    SetActive(self.gripReiatsuRoot, true)
-    PlayParticleSystemsInRoot(self.gripReiatsuRoot)
+    ShowAndPlayParticleRoot(self.gripReiatsuRoot)
 
     print("KUROHITSUGI TEST - Grip Reiatsu visual shown")
 end
@@ -4745,8 +4748,7 @@ function spellFireBall:StartSequenceReiatsuContinuity()
     self.stoppedSequenceReiatsu = false
 
     if self.sequenceReiatsuRoot ~= nil then
-        SetActive(self.sequenceReiatsuRoot, true)
-        PlayParticleSystemsInRoot(self.sequenceReiatsuRoot)
+        ShowAndPlayParticleRoot(self.sequenceReiatsuRoot)
         print("KUROHITSUGI TEST - Sequence Reiatsu continuity started")
     else
         print("KUROHITSUGI WARNING - SequenceReiatsuRoot nil")
@@ -4800,8 +4802,7 @@ function spellFireBall:StartGlowTransition()
     self.startedGlowTransition = true
     self.stoppedGlowTransition = false
 
-    SetActive(self.glowTransitionRoot, true)
-    PlayParticleSystemsInRoot(self.glowTransitionRoot)
+    ShowAndPlayParticleRoot(self.glowTransitionRoot)
 
     print("KUROHITSUGI TEST - Glow transition started")
 end
