@@ -119,7 +119,7 @@ MonoBehaviour:
   playImpactOnTimeout: 0
   ignoreDamageList: 
   script:
-    luaScript: WMD_FlySlashScript
+    luaScript: EXP_KurohitsugiRainSlashScript
     objList: []
     numberList:
     - name: destoryWhenHitEnv
