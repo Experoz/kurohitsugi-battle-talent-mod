@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 26 block:
--- extract charge release/cancel helper functions only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 27 block:
+-- extract charge completion/cancel cleanup helpers only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -5200,6 +5200,24 @@ function spellFireBall:ResetChargeCancelRuntimeState()
     self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
 end
 
+function spellFireBall:CompleteChargeReleaseCast(castPos)
+    self:HideKurohitsugiPreviewAll()
+
+    if castPos ~= nil then
+        self.lastTargetPos = castPos
+        self:CastKurohitsugiAtTarget()
+    else
+        self:StopChargeReiatsuBind()
+    end
+end
+
+function spellFireBall:CleanupChargeCancelVisuals()
+    self:StopChargeReiatsuBind()
+    self:HideReiatsuVisual()
+    self:HideGripReiatsuVisual()
+    self:ResetChargeCancelRuntimeState()
+end
+
 function spellFireBall:OnChargeBegin()
     if self.gripReiatsuOnlyActive then
         self:StopGripReiatsuOnly()
@@ -5243,25 +5261,14 @@ function spellFireBall:OnChargeRelease()
     end
 
     local castPos = self.lastTargetPos
-
-    self:HideKurohitsugiPreviewAll()
-
-    if castPos ~= nil then
-        self.lastTargetPos = castPos
-        self:CastKurohitsugiAtTarget()
-    else
-        self:StopChargeReiatsuBind()
-    end
+    self:CompleteChargeReleaseCast(castPos)
 end
 
 function spellFireBall:OnChargeCancel()
     -- Riporta la mano alla posa normale anche se il charge viene cancellato.
     self:SetChargeHandPose(false)
 
-    self:StopChargeReiatsuBind()
-    self:HideReiatsuVisual()
-    self:HideGripReiatsuVisual()
-    self:ResetChargeCancelRuntimeState()
+    self:CleanupChargeCancelVisuals()
 
     if self.isSequenceRunning then
         return
