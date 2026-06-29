@@ -105,10 +105,6 @@ MonoBehaviour:
     m_Address: ICon/EXP_Kurohitsugi_Gem
     m_ReadOnly: 0
     m_SerializedLabels: []
-  - m_GUID: a2bdd64041d547849bd4c405dcc3a75f
-    m_Address: LuaScript/WMD_EXP_Kurohitsugi_GemScript 1
-    m_ReadOnly: 0
-    m_SerializedLabels: []
   - m_GUID: 2274a21a43977c54489c4a8deab62439
     m_Address: LuaScript/WMD_FlySlashScript 1
     m_ReadOnly: 0
