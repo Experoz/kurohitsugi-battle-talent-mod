@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 30 block:
--- extract preview runtime visual update helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 31 block:
+-- extract grip reiatsu active visual update helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2134,6 +2134,13 @@ function spellFireBall:StopGripReiatsuOnly()
     print("KUROHITSUGI TEST - Grip Reiatsu Only stopped")
 end
 
+function spellFireBall:UpdateGripReiatsuOnlyActiveVisuals()
+    if self.gripReiatsuOnlyActive then
+        self:UpdateChargeReiatsuBind()
+        self:UpdateGripReiatsuVisual()
+    end
+end
+
 function spellFireBall:UpdateGripReiatsuOnlyManual()
     if not self.gripReiatsuOnlyEnabled then return end
 
@@ -2166,10 +2173,7 @@ function spellFireBall:UpdateGripReiatsuOnlyManual()
         self.gripReiatsuOnlyWasPressed = gripPressed
     end
 
-    if self.gripReiatsuOnlyActive then
-        self:UpdateChargeReiatsuBind()
-        self:UpdateGripReiatsuVisual()
-    end
+    self:UpdateGripReiatsuOnlyActiveVisuals()
 end
 
 function spellFireBall:StartGripReiatsuOnlyWatcher()
