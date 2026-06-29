@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 29 block:
--- extract preview target area update helper only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 30 block:
+-- extract preview runtime visual update helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2221,18 +2221,20 @@ function spellFireBall:UpdateTargetAreaDuringPreview()
     end
 end
 
+function spellFireBall:UpdatePreviewRuntimeVisuals()
+    self:UpdateChargeReiatsuBind()
+    self:UpdateReiatsuVisual()
+    self:UpdatePreviewCubeChargeVisual()
+    self:UpdateTargetAreaDuringPreview()
+end
+
 function spellFireBall:UpdateKurohitsugiPreviewManual()
     self:FindKurohitsugiObjects()
 
     self:UpdateGripCancelDuringCharge()
     if self.chargeCanceledByGrip then return end
 
-    self:UpdateChargeReiatsuBind()
-    self:UpdateReiatsuVisual()
-
-    self:UpdatePreviewCubeChargeVisual()
-
-    self:UpdateTargetAreaDuringPreview()
+    self:UpdatePreviewRuntimeVisuals()
 end
 
 function spellFireBall:StartKurohitsugiPreviewUpdate()
