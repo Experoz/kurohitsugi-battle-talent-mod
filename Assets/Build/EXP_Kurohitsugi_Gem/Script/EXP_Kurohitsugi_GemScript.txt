@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 25 block:
--- extract charge begin/input helper functions only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 26 block:
+-- extract charge release/cancel helper functions only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -5177,6 +5177,29 @@ function spellFireBall:StartChargePreviewAndReiatsu()
     self:StartChargeReiatsuBind()
 end
 
+function spellFireBall:HandleReleaseAfterGripCancel()
+    self:StopChargeReiatsuBind()
+    self:HideReiatsuVisual()
+    self:HideKurohitsugiPreviewAll()
+    self:HideGripReiatsuVisual()
+    self.gripCancelWasPressed = false
+    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
+    print("KUROHITSUGI TEST - release ignored after grip cancel")
+end
+
+function spellFireBall:HandleReleaseBlockedByActiveSequence()
+    self.pendingCastBlocked = true
+    self:HideKurohitsugiPreviewAll()
+    self:StopChargeReiatsuBind()
+    print("KUROHITSUGI BLOCKED - release ignored while sequence is running")
+end
+
+function spellFireBall:ResetChargeCancelRuntimeState()
+    self.gripCancelWasPressed = false
+    self.chargeCanceledByGrip = false
+    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
+end
+
 function spellFireBall:OnChargeBegin()
     if self.gripReiatsuOnlyActive then
         self:StopGripReiatsuOnly()
@@ -5204,13 +5227,7 @@ function spellFireBall:OnChargeRelease()
     self:SetChargeHandPose(false)
 
     if self.chargeCanceledByGrip then
-        self:StopChargeReiatsuBind()
-        self:HideReiatsuVisual()
-        self:HideKurohitsugiPreviewAll()
-        self:HideGripReiatsuVisual()
-        self.gripCancelWasPressed = false
-        self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
-        print("KUROHITSUGI TEST - release ignored after grip cancel")
+        self:HandleReleaseAfterGripCancel()
         return
     end
 
@@ -5221,10 +5238,7 @@ function spellFireBall:OnChargeRelease()
     -- Se durante una sequenza attiva arriva un release, lo ignoriamo.
     -- Importante: non chiamiamo ResetKurohitsugiCast e non fermiamo la sequenza in corso.
     if self.isSequenceRunning then
-        self.pendingCastBlocked = true
-        self:HideKurohitsugiPreviewAll()
-        self:StopChargeReiatsuBind()
-        print("KUROHITSUGI BLOCKED - release ignored while sequence is running")
+        self:HandleReleaseBlockedByActiveSequence()
         return
     end
 
@@ -5247,9 +5261,7 @@ function spellFireBall:OnChargeCancel()
     self:StopChargeReiatsuBind()
     self:HideReiatsuVisual()
     self:HideGripReiatsuVisual()
-    self.gripCancelWasPressed = false
-    self.chargeCanceledByGrip = false
-    self.gripReiatsuOnlyWasPressed = self:IsPrimaryGripPressed()
+    self:ResetChargeCancelRuntimeState()
 
     if self.isSequenceRunning then
         return
