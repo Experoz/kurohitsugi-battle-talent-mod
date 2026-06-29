@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 24 block:
--- extract sequence lifecycle and cast root helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 25 block:
+-- extract charge begin/input helper functions only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -5150,6 +5150,33 @@ end
 -- CHARGE EVENTS
 -- =========================================================
 
+function spellFireBall:SetChargeHandPose(active)
+    pcall(function()
+        self:SetHandPose(active)
+    end)
+end
+
+function spellFireBall:ResetChargeCancelTracking()
+    -- Non cancellare subito se il grip è già premuto per via della presa della gemma:
+    -- il cancel richiede una nuova pressione durante il charge.
+    self.chargeCanceledByGrip = false
+    self.gripCancelWasPressed = self:IsPrimaryGripPressed()
+    self.gripCancelNextDebugTime = 0
+
+    if self.gripCancelDebug then
+        print("KUROHITSUGI GRIP DEBUG - OnChargeBegin initialGrip=" .. tostring(self.gripCancelWasPressed))
+    end
+end
+
+function spellFireBall:StartChargePreviewAndReiatsu()
+    self:ShowKurohitsugiPreview()
+    self:PreparePreviewCubeCharge()
+    self:InitTargetPosition()
+    self:ShowReiatsuVisual()
+    self:StartKurohitsugiPreviewUpdate()
+    self:StartChargeReiatsuBind()
+end
+
 function spellFireBall:OnChargeBegin()
     if self.gripReiatsuOnlyActive then
         self:StopGripReiatsuOnly()
@@ -5165,34 +5192,16 @@ function spellFireBall:OnChargeBegin()
 
     -- Mantiene la mano in posa spell aperta durante il charge,
     -- come fa la Fireball base in WMD_SpellThrowScript.
-    pcall(function()
-        self:SetHandPose(true)
-    end)
+    self:SetChargeHandPose(true)
 
     self:ResetKurohitsugiCast()
-
-    -- Non cancellare subito se il grip è già premuto per via della presa della gemma:
-    -- il cancel richiede una nuova pressione durante il charge.
-    self.chargeCanceledByGrip = false
-    self.gripCancelWasPressed = self:IsPrimaryGripPressed()
-    self.gripCancelNextDebugTime = 0
-    if self.gripCancelDebug then
-        print("KUROHITSUGI GRIP DEBUG - OnChargeBegin initialGrip=" .. tostring(self.gripCancelWasPressed))
-    end
-
-    self:ShowKurohitsugiPreview()
-    self:PreparePreviewCubeCharge()
-    self:InitTargetPosition()
-    self:ShowReiatsuVisual()
-    self:StartKurohitsugiPreviewUpdate()
-    self:StartChargeReiatsuBind()
+    self:ResetChargeCancelTracking()
+    self:StartChargePreviewAndReiatsu()
 end
 
 function spellFireBall:OnChargeRelease()
     -- Riporta la mano alla posa normale quando finisce il charge.
-    pcall(function()
-        self:SetHandPose(false)
-    end)
+    self:SetChargeHandPose(false)
 
     if self.chargeCanceledByGrip then
         self:StopChargeReiatsuBind()
@@ -5233,9 +5242,7 @@ end
 
 function spellFireBall:OnChargeCancel()
     -- Riporta la mano alla posa normale anche se il charge viene cancellato.
-    pcall(function()
-        self:SetHandPose(false)
-    end)
+    self:SetChargeHandPose(false)
 
     self:StopChargeReiatsuBind()
     self:HideReiatsuVisual()
