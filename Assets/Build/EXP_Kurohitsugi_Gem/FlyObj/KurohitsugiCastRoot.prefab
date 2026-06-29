@@ -1124,7 +1124,6 @@ GameObject:
   - component: {fileID: 8643043692259907111}
   - component: {fileID: 5968525981801230412}
   - component: {fileID: 6277820145221893312}
-  - component: {fileID: 8590548479914113531}
   m_Layer: 15
   m_Name: KurohitsugiCastRoot
   m_TagString: Untagged
@@ -1263,47 +1262,6 @@ MonoBehaviour:
     stringList:
     - name: explodeEffect
       value: WMD_BigExplosion
---- !u!114 &8590548479914113531
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4214804574996010930}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e872d86773994e46ae8a7f2196f8330, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  linesRoot: {fileID: 3403871864906837615}
-  wallsRoot: {fileID: 7954263152616276642}
-  topRoot: {fileID: 2777605302677769076}
-  spikesRoot: {fileID: 8554917537790357684}
-  effectsRoot: {fileID: 2842137919918812011}
-  breakPiecesRoot: {fileID: 9007383990592971706}
-  delayBeforeStart: 0.1
-  linesDelay: 0.25
-  wallsDelay: 0.35
-  topDelay: 0.25
-  effectsDelay: 0.25
-  spikesDelay: 0.35
-  verticalLinesGrowDuration: 0.8
-  topLinesGrowDuration: 0.5
-  wallsGrowDuration: 0.5
-  topGrowDuration: 0.3
-  spikeAppearStepDelay: 0.08
-  spikeGrowDuration: 0.12
-  spikeOvershootMultiplier: 1.18
-  holdAfterSpikes: 1
-  spikeRetractDuration: 0.25
-  hideAfterRetract: 1
-  playBreakPieces: 1
-  breakPiecesDuration: 0.4
-  breakPiecesHoldDuration: 0.45
-  breakPiecesOutwardDistance: 0.75
-  breakPiecesStartScaleMultiplier: 0.65
-  breakPiecesEndScaleMultiplier: 1
-  playOnStart: 1
 --- !u!1 &4280210099062019837
 GameObject:
   m_ObjectHideFlags: 0
