@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 27 block:
--- extract charge completion/cancel cleanup helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Conservative refactor step 29 block:
+-- extract preview target area update helper only; no gameplay/timing/damage/prefab/addressable changes.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -2202,17 +2202,7 @@ end
 -- PREVIEW UPDATE LOOP
 -- =========================================================
 
-function spellFireBall:UpdateKurohitsugiPreviewManual()
-    self:FindKurohitsugiObjects()
-
-    self:UpdateGripCancelDuringCharge()
-    if self.chargeCanceledByGrip then return end
-
-    self:UpdateChargeReiatsuBind()
-    self:UpdateReiatsuVisual()
-
-    self:UpdatePreviewCubeChargeVisual()
-
+function spellFireBall:UpdateTargetAreaDuringPreview()
     if self.targetAreaRoot ~= nil and self.startHandLocalPos ~= nil and self.startTargetPos ~= nil then
         local currentHandLocalPos = self:GetHandRelativePos()
         local handDelta = currentHandLocalPos - self.startHandLocalPos
@@ -2229,6 +2219,20 @@ function spellFireBall:UpdateKurohitsugiPreviewManual()
 
         self.lastTargetPos = pos
     end
+end
+
+function spellFireBall:UpdateKurohitsugiPreviewManual()
+    self:FindKurohitsugiObjects()
+
+    self:UpdateGripCancelDuringCharge()
+    if self.chargeCanceledByGrip then return end
+
+    self:UpdateChargeReiatsuBind()
+    self:UpdateReiatsuVisual()
+
+    self:UpdatePreviewCubeChargeVisual()
+
+    self:UpdateTargetAreaDuringPreview()
 end
 
 function spellFireBall:StartKurohitsugiPreviewUpdate()
