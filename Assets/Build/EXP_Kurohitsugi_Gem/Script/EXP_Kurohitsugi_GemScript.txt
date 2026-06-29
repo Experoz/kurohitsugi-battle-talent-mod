@@ -2,8 +2,8 @@
 -- EXP KUROHITSUGI GEM SCRIPT
 -- Branch: feature/kurohitsugi-script-refactor
 --
--- Conservative refactor step 27 block:
--- extract charge completion/cancel cleanup helpers only; no gameplay/timing/damage/prefab/addressable changes.
+-- Runtime cleanup step 28:
+-- override vanilla spell Update to prevent unused FlyObject lifecycle errors.
 -- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
 -- =========================================================
 
@@ -5291,6 +5291,19 @@ end
 
 function spellFireBall.OnEnchantSkillWithPlayer(ib, rb, thisCol, otherCol, point, normal, relaVel, character)
     ib:EnchantSkillCountUpdate()
+end
+
+-- =========================================================
+-- RUNTIME UPDATE OVERRIDE
+-- =========================================================
+
+function spellFireBall:Update()
+    -- Intentionally empty.
+    -- Kurohitsugi does not use the vanilla WMD_SpellThrowScript FlyObject lifecycle.
+    -- The spell is driven by charge callbacks and explicit schedulers:
+    -- preview update, reiatsu update and sequence update.
+    -- Overriding Update prevents the inherited vanilla spell update from trying
+    -- to access self.fo when no vanilla fly object has been spawned.
 end
 
 -- =========================================================
