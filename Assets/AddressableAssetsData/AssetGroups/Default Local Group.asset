@@ -113,10 +113,6 @@ MonoBehaviour:
     m_Address: KurohitsugiDamageBullet
     m_ReadOnly: 0
     m_SerializedLabels: []
-  - m_GUID: 4e872d86773994e46ae8a7f2196f8330
-    m_Address: LuaScript/WMD_KurohitsugiSequenceController
-    m_ReadOnly: 0
-    m_SerializedLabels: []
   - m_GUID: 76425e2646a20b647b021ff9ca971ff8
     m_Address: FlyObj/WMD_ElementBullet_Kurohitsugi
     m_ReadOnly: 0
