@@ -4,8 +4,9 @@
 Material:
   serializedVersion: 6
   m_ObjectHideFlags: 0
-  m_PrefabParentObject: {fileID: 0}
-  m_PrefabInternal: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
   m_Name: Reiatsu_Wall
   m_Shader: {fileID: 4800000, guid: b4fb227e7ed30434ba81e5b81c714175, type: 3}
   m_ShaderKeywords: 
@@ -27,7 +28,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Mask:
-        m_Texture: {fileID: 2800000, guid: 32a2a0fff0c45634fb83d8d541ab67a1, type: 3}
+        m_Texture: {fileID: 2800000, guid: 749c39edd13759844819705a1213a744, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _NormalMap:
@@ -35,11 +36,11 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Tex1:
-        m_Texture: {fileID: 2800000, guid: 3f1d4fadb37c37e4488860109d7dce4b, type: 3}
+        m_Texture: {fileID: 2800000, guid: 720ea8bdbef1a3046a0bd9680a2e3b86, type: 3}
         m_Scale: {x: 3, y: 0.5}
         m_Offset: {x: 0, y: 0}
     - _Tex2:
-        m_Texture: {fileID: 2800000, guid: beea0694d337e23449c7d21e4dfef1cb, type: 3}
+        m_Texture: {fileID: 2800000, guid: 81b85bed558bd9a45b296c2dbb0c6041, type: 3}
         m_Scale: {x: 3, y: 0.5}
         m_Offset: {x: 0, y: 0}
     - _TextureSample1:
@@ -67,3 +68,4 @@ Material:
     - _SpeedTex1: {r: 0.2, g: -0.25, b: -0.3, a: -0.35}
     - _SpeedTex2XYEmission: {r: 0.1, g: -0.5, b: 2, a: 0}
     - _TintColor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
