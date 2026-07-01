@@ -15,7 +15,7 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_Data:
     m_SerializedData: []
-  m_GUID: 701c550292250804b97ebbb477c914cf
+  m_GUID: c7ed436fad980ce4197f5e58771bfc35
   m_SerializeEntries:
   - m_GUID: 2984de54a2f121146a48075682699fe6
     m_Address: LuaScript/AvatarSoundPlayerScript
@@ -90,7 +90,7 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: c63be6ea78a3b654f8719e34e34abe1a
-    m_Address: LuaScript/KurohitsugiDamageBullet.lua
+    m_Address: LuaScript/KurohitsugiDamageBullet
     m_ReadOnly: 0
     m_SerializedLabels: []
   - m_GUID: 9b36a498b239e0245b04c6d0d1a6dd1b
