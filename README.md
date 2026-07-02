@@ -1,472 +1,193 @@
-\# Kurohitsugi Battle Talent VR Mod
+# Hadō #90: Kurohitsugi — Battle Talent VR Mod
 
+A fan-made **Battle Talent VR** spell mod inspired by the visual concept of *Hadō #90: Kurohitsugi*, rebuilt as a standalone magic gem for **Meta Quest 3**.
 
+The mod adds a cinematic dark magic spell with charge targeting, palm preview, ground indicator, reiatsu pressure effects, black coffin formation, rain slash impact, glow phase and final shattering sequence.
 
-Unity VR spell prototype for \*\*Battle Talent\*\* on \*\*Meta Quest 3 standalone\*\*, inspired by a dark ritual cube spell sequence.
+> This project was developed as a technical portfolio project focused on Unity modding, Lua scripting, VR interaction design, Git workflow, Addressables, mod.io packaging, and AI-assisted development.
 
+---
 
+## Download
 
-This project is a personal learning and prototyping repository focused on VR modding, Unity prefab workflows, scripting, spell activation logic, visual effect sequencing, Quest standalone testing, and Git-based version control.
+The mod is available on mod.io for Battle Talent:
 
+[Hado #90: Kurohitsugi on mod.io](https://mod.io/g/battletalent/m/hado-90-kurohitsugi1)
 
+---
 
-\---
+## Features
 
+* Standalone spell gem for Battle Talent
+* Trigger hold to charge the spell
+* Palm preview cube while charging
+* Ground target indicator
+* Grip cancel during charge
+* Grip-based reiatsu pressure effect
+* Black coffin-style formation sequence
+* Animated walls, top closure and visual buildup
+* Reiatsu ring and center effects
+* Rain slash / piercing phase
+* Final glow and shattering effect
+* Tested on Meta Quest 3 standalone
+* Published publicly through mod.io
 
+---
 
-\## Project Status
+## Gameplay Flow
 
+1. Spawn and equip the Kurohitsugi spell gem.
+2. Hold the trigger to begin charging.
+3. A preview cube appears near the hand.
+4. A target indicator appears on the ground.
+5. Aim the spell area.
+6. Release the trigger to cast.
+7. The Kurohitsugi sequence forms around the target.
+8. Reiatsu effects, slash impacts and the final shattering phase are triggered.
 
+Grip can be used to cancel the spell while charging. Grip can also activate a separate reiatsu pressure effect when used outside the cast release flow.
 
-Current milestone:
+---
 
+## Technical Stack
 
+* **Engine:** Unity 2020.3.48f1
+* **Game:** Battle Talent VR
+* **Target platform:** Meta Quest 3 standalone
+* **Toolkit:** Battle Talent Mod Toolkit
+* **Scripting:** Lua
+* **Asset pipeline:** Unity Prefabs, Materials, Shaders, Addressables
+* **Distribution:** mod.io
+* **Version control:** Git / GitHub
+
+---
+
+## Technical Highlights
+
+### Spell Gem Interaction
+
+The spell is implemented as a standalone Battle Talent gem. The interaction flow is based on a charge-and-release pattern:
+
+* trigger press starts the charging phase;
+* visual feedback is shown on the hand and on the ground;
+* release triggers the full Kurohitsugi cast sequence;
+* grip can cancel or activate an additional reiatsu pressure effect.
+
+### Kurohitsugi Sequence System
+
+The main sequence combines multiple staged visual elements:
+
+* palm preview;
+* target indicator;
+* line buildup;
+* wall formation;
+* top closure;
+* reiatsu center and ring effects;
+* rain slash phase;
+* glow impact;
+* final shattering.
+
+The timing was tuned for a cinematic effect while keeping the spell usable in VR gameplay.
+
+### Addressables and Packaging
+
+The project required a clean Addressables setup to make the mod load correctly in Battle Talent.
+
+The final mod.io package uses the correct Battle Talent mod structure:
 
 ```text
-
-v0.1 - Gesture, spawn and Kurohitsugi sequence working
-
+EXP_Hado90_Kurohitsugi/
+├── Android/
+├── Android.meta
+├── StandaloneWindows/
+└── StandaloneWindows.meta
 ```
 
+Generated build output is intentionally excluded from the repository through `.gitignore`.
 
+### Meta Quest 3 Standalone Constraints
 
-At this stage, the project includes:
+The mod was tested directly on Meta Quest 3 standalone. This required attention to:
 
+* performance-friendly visual effects;
+* asset bundle size;
+* shader compatibility;
+* prefab cleanup;
+* runtime Lua errors;
+* mod.io packaging behavior;
+* in-game installation and loading.
 
+---
 
-\- VR spell gem activation flow
+## AI-Assisted Development Workflow
 
-\- Trigger-based gesture/cast logic
+This project was developed with an AI-assisted workflow.
 
-\- Kurohitsugi object spawn
+AI was used as a technical support tool for:
 
-\- Timed visual sequence
+* debugging Lua and Unity-related issues;
+* planning script refactors;
+* analyzing Git status, branch and tag workflows;
+* improving repository cleanup;
+* preparing release notes and documentation;
+* reasoning through mod.io packaging problems;
+* translating technical problems into testable steps.
 
-\- Ground line appearance
+The implementation was tested manually in Unity and on Meta Quest 3. AI suggestions were validated through direct in-game testing, Git commits, branch isolation and iterative debugging.
 
-\- Cube wall/top sequence
+---
 
-\- Spike sequence
+## Git Workflow
 
-\- Quest 3 standalone testing workflow
+The project uses a structured Git workflow with feature, cleanup and release branches.
 
-\- Git version control setup
-
-\- GitHub repository setup
-
-
-
-\---
-
-
-
-\## Goal
-
-
-
-The goal of this project is to recreate a dramatic dark cube spell sequence inside \*\*Battle Talent VR\*\*.
-
-
-
-The intended spell flow is:
-
-
-
-1\. The player activates the spell through a VR input/gesture.
-
-2\. A target/cast position is selected.
-
-3\. The Kurohitsugi sequence starts at the chosen position.
-
-4\. Ground lines appear first.
-
-5\. The cube walls appear.
-
-6\. The top section appears.
-
-7\. Spikes pierce the structure.
-
-8\. The sequence ends with destruction, damage logic, or visual cleanup.
-
-
-
-\---
-
-
-
-\## Tech Stack
-
-
-
-\- Unity
-
-\- Battle Talent Mod Toolkit
-
-\- Lua scripting
-
-\- C# / Unity components
-
-\- Android build workflow
-
-\- Meta Quest 3 standalone testing
-
-\- Git
-
-\- GitHub
-
-\- AI-assisted development with ChatGPT
-
-
-
-\---
-
-
-
-\## Repository Structure
-
-
+Important branch:
 
 ```text
-
-Assets/
-
-Packages/
-
-ProjectSettings/
-
-README.md
-
-.gitignore
-
-PROJECT\_PROMPT.md
-
+release/modio-clean-build
 ```
 
-
-
-Main Unity project folders:
-
-
-
-| Folder | Purpose |
-
-|---|---|
-
-| `Assets/` | Project assets, prefabs, scripts, materials and mod files |
-
-| `Packages/` | Unity package configuration |
-
-| `ProjectSettings/` | Unity project settings |
-
-| `.gitignore` | Files and folders ignored by Git |
-
-| `README.md` | Project documentation |
-
-
-
-Generated Unity folders such as `Library/`, `Temp/`, `Logs/` and `UserSettings/` are intentionally excluded from Git.
-
-
-
-\---
-
-
-
-\## Current Features
-
-
-
-\### Working
-
-
-
-\- Spell activation gesture
-
-\- Kurohitsugi spawn
-
-\- Main visual sequence
-
-\- Timed activation of sequence elements
-
-\- Local Git repository
-
-\- GitHub remote repository
-
-\- Quest-oriented mod workflow
-
-
-
-\### In Progress
-
-
-
-\- Area damage logic
-
-\- Final spell cleanup
-
-\- Visual polish
-
-\- TYBW-inspired timing refinement
-
-\- Spike impact tuning
-
-\- Audio and haptic feedback
-
-\- Performance optimization for Meta Quest 3
-
-
-
-\---
-
-
-
-\## Development Workflow
-
-
-
-This project uses Git for version control.
-
-
-
-Basic workflow:
-
-
-
-```bash
-
-git status
-
-git add .
-
-git commit -m "Describe the change"
-
-git push
-
-```
-
-
-
-Before starting a risky change, the project should be in a clean state:
-
-
-
-```bash
-
-git status
-
-```
-
-
-
-Expected result:
-
-
+Important public tag:
 
 ```text
-
-nothing to commit, working tree clean
-
+modio-0.1.6-public
 ```
 
+The `main` branch contains the public portfolio version of the project.
 
+---
 
-For larger features, a separate branch should be used:
-
-
-
-```bash
-
-git checkout -b feature/area-damage
-
-```
-
-
-
-Example feature branches:
-
-
+## Current Public Version
 
 ```text
-
-feature/area-damage
-
-feature/spike-polish
-
-feature/tybw-timing
-
-feature/sound-effects
-
-feature/quest-performance
-
+Version: 0.1.6
+Status: Public on mod.io
+Target: Battle Talent standalone / Meta Quest 3
 ```
 
+---
 
+## Known Limitations
 
-\---
+This is a fan-made mod and an ongoing learning project.
 
+Known areas for future improvement:
 
+* further cleanup of runtime console warnings;
+* improved damage balancing;
+* additional optimization for standalone VR;
+* more polished VFX transitions;
+* expanded documentation for setup/build steps;
+* possible future conversion into a gesture-based magic system.
 
-\## Build and Testing Notes
+---
 
+## Disclaimer
 
+This is a fan-made Battle Talent mod inspired by the visual concept of Kurohitsugi / Hadō #90.
 
-The project is tested on \*\*Meta Quest 3 standalone\*\* using the Battle Talent modding workflow.
+This project is not affiliated with Bleach, Shueisha, Studio Pierrot, Tite Kubo, Battle Talent, or any official rights holders.
 
+All original trademarks and intellectual properties belong to their respective owners.
 
-
-Typical development cycle:
-
-
-
-1\. Modify Unity scene, prefab or script.
-
-2\. Build the mod for Android/Quest.
-
-3\. Copy the generated mod files to the Quest.
-
-4\. Launch Battle Talent.
-
-5\. Test spell behavior in-game.
-
-6\. Fix issues.
-
-7\. Commit stable changes with Git.
-
-8\. Push the updated version to GitHub.
-
-
-
-\---
-
-
-
-\## AI-Assisted Development
-
-
-
-This project was developed with the support of \*\*ChatGPT\*\* as an AI coding and learning assistant.
-
-
-
-ChatGPT was used for:
-
-
-
-\- Code generation support
-
-\- Debugging guidance
-
-\- Unity workflow planning
-
-\- Git setup guidance
-
-\- Technical documentation
-
-\- Step-by-step problem solving
-
-\- Iterative improvement of scripts and project structure
-
-
-
-The project was tested, integrated and refined manually inside Unity and Battle Talent on Meta Quest 3.
-
-
-
-\---
-
-
-
-\## Learning Goals
-
-
-
-This project is part of a broader learning path toward software development, web development and applied AI-assisted programming.
-
-
-
-Main skills practiced:
-
-
-
-\- Version control with Git
-
-\- GitHub repository management
-
-\- Unity project organization
-
-\- Debugging complex behavior
-
-\- Iterative development
-
-\- Technical documentation
-
-\- Script-based logic
-
-\- VR input handling
-
-\- Testing on real hardware
-
-\- Using AI tools effectively during development
-
-
-
-\---
-
-
-
-\## Milestones
-
-
-
-\### v0.1
-
-
-
-\- Initial working Kurohitsugi sequence
-
-\- Gesture works
-
-\- Spawn works
-
-\- Main sequence works
-
-\- Git repository initialized
-
-\- Project pushed to GitHub
-
-
-
-\### Next Milestones
-
-
-
-\- Add reliable area damage
-
-\- Add final cleanup logic
-
-\- Improve visual timing
-
-\- Improve spike behavior
-
-\- Add sound effects
-
-\- Add haptic feedback
-
-\- Optimize for Quest 3 performance
-
-
-
-\---
-
-
-
-\## Notes
-
-
-
-This is a personal technical prototype and learning project.
-
-
-
-The repository is currently private while the project is under active development.
-
+This repository is intended as a technical portfolio project and modding showcase.
