@@ -8,9 +8,13 @@ The mod adds a cinematic dark magic spell with charge targeting, palm preview, g
 
 ---
 
-## Preview
+## Gameplay Preview
 
-![Kurohitsugi coffin formation](docs/media/kurohitsugi-coffin-formation.jpg)
+[![Watch the gameplay preview](docs/media/kurohitsugi-coffin-formation.jpg)](https://youtu.be/nvYWBhU7-x8)
+
+Watch the gameplay demo on YouTube:
+
+[Hadō #90: Kurohitsugi — Battle Talent VR Mod Gameplay](https://youtu.be/nvYWBhU7-x8)
 
 ## Screenshots
 
