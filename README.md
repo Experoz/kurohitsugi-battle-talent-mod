@@ -8,6 +8,22 @@ The mod adds a cinematic dark magic spell with charge targeting, palm preview, g
 
 ---
 
+## Preview
+
+![Kurohitsugi coffin formation](docs/media/kurohitsugi-coffin-formation.jpg)
+
+## Screenshots
+
+| Charge Preview | Grip Reiatsu |
+|---|---|
+| ![Charge preview](docs/media/kurohitsugi-charge-preview.jpg) | ![Grip reiatsu](docs/media/kurohitsugi-grip-reiatsu.jpg) |
+
+| Coffin Formation | Spike Impact | Final Shattering |
+|---|---|---|
+| ![Coffin formation](docs/media/kurohitsugi-coffin-formation.jpg) | ![Spike impact](docs/media/kurohitsugi-spike-impact.jpg) | ![Final shattering](docs/media/kurohitsugi-shattering.jpg) |
+
+---
+
 ## Download
 
 The mod is available on mod.io for Battle Talent:
