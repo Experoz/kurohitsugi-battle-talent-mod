@@ -8,6 +8,17 @@ The mod adds a cinematic dark magic spell with charge targeting, palm preview, g
 
 ---
 
+
+## Compatibility
+
+- **Meta Quest 3 standalone:** tested and supported.
+- **PCVR / StandaloneWindows:** build included, but not fully validated yet.
+- **SteamVR:** currently under investigation after a user report that the spell does not cast.
+
+The mod is currently Quest 3 standalone-first.
+
+---
+
 ## Gameplay Preview
 
 [![Watch the gameplay preview](docs/media/kurohitsugi-coffin-formation.jpg)](https://youtu.be/nvYWBhU7-x8)
