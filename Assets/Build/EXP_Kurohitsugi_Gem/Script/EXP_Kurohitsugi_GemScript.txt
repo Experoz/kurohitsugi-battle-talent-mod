@@ -1,10 +1,11 @@
 -- =========================================================
 -- EXP KUROHITSUGI GEM SCRIPT
--- Branch: feature/kurohitsugi-script-refactor
+-- Hadō #90: Kurohitsugi spell gem for Battle Talent VR.
+-- Target runtime: Meta Quest 3 standalone / Unity 2020.3.48f1.
 --
--- Conservative refactor step 31 block:
--- extract grip reiatsu active visual update helper only; no gameplay/timing/damage/prefab/addressable changes.
--- Target runtime: Battle Talent VR standalone / Meta Quest 3 / Unity 2020.3.48f1.
+-- Controls charge preview, ground targeting, cast sequencing,
+-- reiatsu pressure, rain slash pulses, damage handling
+-- and the final shattering phase.
 -- =========================================================
 
 -- =========================================================
@@ -52,17 +53,16 @@ local spellFireBall = {
     groundRayDistance = 24.0,
     groundRayMinValidY = -20.0,
 
-    -- Ground fix V2:
-    -- 1) evita muri/pareti filtrando la normale del raycast;
-    -- 2) campiona più punti sotto l'area del cubo;
-    -- 3) usa il punto più basso tra le superfici valide, così sulle scale il fondo non resta aperto.
+    -- Ground sampling notes:
+    -- 1) filters walls/vertical surfaces through raycast normals;
+    -- 2) samples multiple points under the coffin footprint;
+    -- 3) uses the lowest valid surface to keep the base closed on stairs and uneven floors.
     groundMinNormalY = 0.55,
     groundFootprintRadius = 1.35,
 
     -- Preview cube charge config.
-    -- Preview cube charge animation recuperata dal commit 160a1c2.
-    -- Parte piccolo durante il charge, cresce fino alla scala originale
-    -- e ruota in modo vorticoso/disordinato su più assi.
+    -- Preview cube grows from a small scale to its original prefab size during charge
+    -- and rotates across multiple axes to communicate unstable energy buildup.
     rotationSpeed = 130,
     previewChargeStartTime = 0,
     previewChargeGrowDuration = 1.15,
@@ -134,19 +134,16 @@ local spellFireBall = {
     -- Glow di transizione: lampo breve sincronizzato con la seconda scarica.
     glowTransitionDuration = 0.20,
 
-    -- Dopo la seconda scarica lasciamo un attimo di impatto, poi parte la frantumazione.
-    -- Dopo glow + seconda scarica lasciamo tempo ai dardi di essere visibili
-    -- prima della frantumazione finale.
-    -- V5: teniamo le spike/esplosioni aperte più a lungo.
-    -- Crea quell'attimo di sospensione alla massima espansione prima della rottura finale.
+    -- After the second rain slash pulse, the sequence holds briefly so the impact,
+    -- glow and spike expansion remain visible before the final shattering phase.
     holdAfterSpikes = 1.00,
     spikeRetractDuration = 0.12,
 
     -- Break pieces visual config.
-    -- Frammentazione finale V6:
-    -- i frammenti mesh si aprono e cadono in world space;
-    -- la sensazione di "svanire nel pavimento" viene data soprattutto dagli Smoke_End_1/2,
-    -- che scendono gradualmente fino a Y locale -4 mentre restano attivi.
+    -- Final shattering behavior:
+    -- mesh fragments open and fall in world space;
+    -- Smoke_End_1/2 move downward while active to create the impression
+    -- of the coffin dissolving into the floor.
     breakPiecesDuration = 1.82,
     breakPiecesHoldDuration = 0.18,
     breakPiecesOutwardDistance = 0.38,
@@ -173,8 +170,7 @@ local spellFireBall = {
     gravityZoneTickInterval = 0.03,
     gravityZoneLastTick = 0,
 
-    -- V7: riprendiamo la potenza della V3, che era quella che dava gravità e danni.
-    -- La differenza è che il push finale non usa più direzioni/velocity aggressive su tutto il ragdoll.
+    -- Gravity pull tuned for strong containment while avoiding aggressive final ragdoll velocity.
     gravityPullForce = 55,
     gravityLiftForce = 0,
     gravityDownForce = 0,
@@ -197,17 +193,17 @@ local spellFireBall = {
     -- La visuale resta Explosion-Ring Down; niente FlyObj dedicato.
     -- Lo script applica direttamente effetto stile Stomp ai nemici nel raggio.
     spikeGroundShockWaveEnabled = true,
-    -- Debug della shockwave fisica: spento dopo i test per non riempire la VR Console.
+    -- Optional shockwave debug logging.
     spikeGroundShockWaveDebug = false,
     spikeGroundShockWaveSpawned = false,
-    -- Shockwave ad anello: colpisce i nemici intorno al Kurohitsugi,
-    -- ma esclude quelli dentro il cubo. Raggio ampio per test.
+    -- Ring-shaped shockwave: affects enemies around the Kurohitsugi
+    -- while excluding targets inside the coffin volume.
     spikeGroundShockWaveInnerRadius = 2.0,
     spikeGroundShockWaveOuterRadius = 10.0,
     spikeGroundShockWaveRadius = 10.0,
     spikeGroundShockWaveCenterHeight = 0.55,
-    -- Shockwave diretta: test reazione visibile.
-    -- Il danno hit-scan resta spento per ora perché il damage host della gemma può essere nil.
+    -- Direct shockwave reaction. Hit-scan damage remains disabled by default
+    -- because the gem damage host can be nil in some runtime states.
     spikeGroundShockWaveDamageEnabled = false,
     spikeGroundShockWaveDoStiffTime = 1.25,
     spikeGroundShockWaveDizzyTime = 0.90,
@@ -228,15 +224,15 @@ local spellFireBall = {
 
     gravityStartAfterWallsStart = 0.35,
 	gravityEndBeforeBreak = 0.16,
-    -- Tenuto acceso perché nella V3 era ciò che faceva davvero funzionare risucchio e danni.
-    -- Viene usato durante l'attrazione, ma NON per il push finale.
+    -- Enables object attraction during the containment phase.
+    -- Final push behavior is handled separately.
     gravityAffectObjects = true,
     gravityVelocityAssist = 0,
 
     -- Direct slash damage config.
-    -- Danno diretto interno del Kurohitsugi V3.
-    -- Non dipende da rain/FlyObject, collider dei dardi o forza fisica.
-    -- Usa prima l'HP/CharacterCombatAttr del target; l'hit-scan resta solo fallback opzionale.
+    -- Direct internal Kurohitsugi damage.
+    -- Does not depend on rain FlyObjects, slash colliders or physics force.
+    -- Uses target HP/CharacterCombatAttr first; hit-scan remains an optional fallback.
     -- Valore principale da bilanciare:
     --   basso: 40-60
     --   medio/forte: 80-120
@@ -253,10 +249,8 @@ local spellFireBall = {
     kurohitsugiSlashStarted = false,
 
     -- FlyObject rain config.
-    -- FlyObject rain interno: soluzione consigliata per fare danni veri.
-    -- IMPORTANTE: devi mettere qui il nome esatto del FlyObject della rapier/slash.
-    -- Esempi possibili SOLO indicativi: "Weapon_ElementBullet_Rapier", "Weapon_FlySlash".
-    -- Se resta vuoto, il sistema non spawna nulla e la spell resta stabile.
+    -- Addressable FlyObject used for internal rain slash pulses.
+    -- If empty, no rain FlyObjects are spawned and the spell remains stable.
     kurohitsugiFlyRainEnabled = true,
     kurohitsugiRainFlyObject = "EXP_Kurohitsugi_RainString",
     kurohitsugiRainStartDelayFromSpikes = 0.00,
@@ -282,7 +276,7 @@ local spellFireBall = {
     -- Charge Reiatsu bind config.
     -- Reiatsu Bind durante il charge:
     -- aura di pressione spirituale attorno al player, indipendente dalla zona di cast.
-    -- V1 prudente: lavora solo sui logic target, non attira verso il player e non tocca oggetti fisici secondari.
+    -- Uses logic targets only, without pulling toward the player or affecting secondary physics objects.
     chargeReiatsuEnabled = true,
     chargeReiatsuActive = false,
     chargeReiatsuRadius = 8.0,
@@ -290,8 +284,8 @@ local spellFireBall = {
     chargeReiatsuTickInterval = 0.05,
     chargeReiatsuLastTick = 0,
 
-    -- V1.5: manteniamo la pressione fisica della V1, ma la riduciamo per evitare vibrazione eccessiva.
-    -- Aggiungiamo anche DoStiff ispirato alla Telekinesis, senza usare joint ad area.
+    -- Applies reduced physical pressure to avoid excessive vibration.
+    -- Adds a Telekinesis-inspired DoStiff reaction without area joints.
     chargeReiatsuDownForce = 0,
     chargeReiatsuVelocityDamping = 0.35,
     chargeReiatsuGravityOffTime = 0,
@@ -300,37 +294,34 @@ local spellFireBall = {
     chargeReiatsuUseStiff = true,
     chargeReiatsuStiffDuration = 0.65,
 
-    -- V2.1: interrupt stile Telecinesi, ma SOLO sui logic target.
-    -- Non usa Character Sweep e non prosegue dopo il release, così non dovrebbe rompere il cast.
-    -- V3.7: pulse ancora più rapido per rendere la pressione/vibrazione più continua.
-    -- La forza viene abbassata leggermente per evitare lo scatto verticale troppo visibile.
+    -- Telekinesis-style interrupt on logic targets only.
+    -- The pulse interval keeps the pressure continuous while limiting visible vertical snapping.
     chargeReiatsuKnockoutInterval = 0.05,
     chargeReiatsuLastKnockoutTime = -999,
     chargeReiatsuUseDoThrowing = true,
     chargeReiatsuUseRootInterrupt = true,
 
-    -- V3: pressione spirituale più "role-based".
-    -- Usa la stessa filosofia della shockwave funzionante: risaliamo al Role Target
-    -- e applichiamo reazioni muscolari/AI, non solo forza fisica su collider casuali.
+    -- Role-based spiritual pressure: resolve the Role Target when possible
+    -- and apply muscle/AI reactions instead of relying only on random physics colliders.
     chargeReiatsuForceRoleTarget = true,
     chargeReiatsuUseDizzy = true,
     chargeReiatsuDizzyDuration = 0.45,
     chargeReiatsuStopAction = true,
     chargeReiatsuProtectMotion = true,
     chargeReiatsuProtectTime = 0.45,
-    -- Spento in V3.6: DoThrowing troppo frequente può far scattare/laggare i ragdoll.
-    -- Il blocco reale lo fanno già Dizzy + Stiff + StopAction.
+    -- Frequent DoThrowing pulses can destabilize ragdolls.
+    -- Dizzy + Stiff + StopAction already provide the main control effect.
     chargeReiatsuUseThrowingPulse = false,
 
-    -- V3.7: pressione più rapida ma un pelo meno forte.
-    -- Obiettivo: tremore continuo, meno "scatto" visibile verso il basso.
+    -- Applies short repeated pressure pulses to create a continuous reiatsu effect
+    -- while limiting unstable vertical ragdoll movement.
     chargeReiatsuSlamSmallEnemies = true,
     chargeReiatsuSmallEnemyDownForce = 5,
     chargeReiatsuMaxDownVelocity = -1.35,
     chargeReiatsuRootForceMultiplier = 0.0,
 
-    -- V3.7 Hips Pressure: proviamo a premere Hips/Pelvis prima del torace.
-    -- L'idea è capire se il punto bacino dà una postura più credibile e meno effetto braccia.
+    -- Applies pressure near the hips/pelvis first to create a more stable posture reaction
+    -- and reduce exaggerated arm movement on ragdoll targets.
     chargeReiatsuUseChestPressure = true,
     chargeReiatsuChestForceMultiplier = 1.0,
     chargeReiatsuChestVelocityDamping = 0.55,
@@ -346,16 +337,14 @@ local spellFireBall = {
     gripCancelWasPressed = false,
     chargeCanceledByGrip = false,
 
-    -- Debug input grip: serve a capire se la gemma riesce davvero a leggere il Grip
-    -- della mano che la impugna. Disattivalo dopo il test.
+    -- Optional grip input debug logging for the hand currently holding the gem.
     gripCancelDebug = false,
     gripCancelDebugInterval = 0.35,
     gripCancelNextDebugTime = 0,
 
     -- Grip-only Reiatsu config.
-    -- Grip Reiatsu Only V2:
-    -- modalità separata: Grip senza Trigger = solo Spiritual Pressure dedicata.
-    -- Nota: NON salva una mano da OnGrab, per non rompere il Grip Cancel già funzionante.
+    -- Separate Grip-only mode: Grip without Trigger activates dedicated Spiritual Pressure.
+    -- It does not cache a hand from OnGrab, preserving the Grip Cancel behavior.
     gripReiatsuOnlyEnabled = true,
     gripReiatsuOnlyActive = false,
     gripReiatsuOnlyWasPressed = false,
@@ -978,9 +967,8 @@ function spellFireBall:CacheBreakPiecesData()
                                     pos = tr.localPosition,
                                     rot = tr.localRotation,
 
-                                    -- V5: moltiplicatori deterministici, non random runtime.
-                                    -- Caduta più disordinata: alcuni frammenti partono subito, altri in leggero ritardo,
-                                    -- e ogni pezzo raggiunge il sotto-pavimento con velocità diversa.
+                                    -- Deterministic multipliers avoid runtime randomness while keeping the fall varied:
+                                    -- some fragments start immediately, others slightly later, each with different speed.
                                     fallDelay = (index % 7) * 0.020,
                                     fallSpeedMul = 1.04 + (index % 7) * 0.085,
                                     outwardMul = 0.86 + (index % 5) * 0.15,
@@ -2001,8 +1989,8 @@ end
 
 function spellFireBall:OnGrab(a, g)
     -- Avvia solo il watcher del Grip-only.
-    -- Non salviamo a.attachedHand: nella versione precedente poteva far leggere la mano sbagliata
-    -- e rompere il Grip Cancel già verificato.
+    -- Do not cache a.attachedHand here: the active hand is resolved dynamically
+    -- to avoid reading the wrong controller and breaking Grip Cancel.
     self:StartGripReiatsuOnlyWatcher()
 end
 
@@ -3103,9 +3091,8 @@ function spellFireBall:GetChargeReiatsuChestTransform(target)
     local rootTr = self:GetPhysicsUnitTransform(target)
     if rootTr == nil then return nil end
 
-    -- V3.7: priorità al bacino.
-    -- Teniamo il nome della funzione per non toccare il resto dello script,
-    -- ma ora il punto cercato è Hips/Pelvis prima di Chest/Spine.
+    -- Prioritize hips/pelvis pressure for a more stable posture reaction.
+    -- The function name is kept for compatibility with the rest of the script.
     local exact = self:FindChildTransformByNameRecursive(rootTr, {
         "Hips",
         "Pelvis",
@@ -3260,8 +3247,7 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
     if pu == nil then return end
     if center == nil then return end
 
-    -- V3.6: stessa filosofia della V3 originale, ma senza slam continuo.
-    -- Risaliamo al Role Target come per la shockwave, ma NON usiamo IsValidGravityTarget().
+    -- Resolve the Role Target like the shockwave logic, but avoid continuous slam behavior.
     local target = pu
 
     if self.chargeReiatsuForceRoleTarget then
@@ -3276,15 +3262,14 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
     -- Evita player/gemma/mani, ma lascia passare i nemici validi.
     if not self:IsSpikeShockWaveValidTarget(target) then return end
 
-    -- Nuovo filtro: non riattivare cadaveri/ragdoll già morti.
+    -- Do not reactivate dead enemies or already settled ragdolls.
     if self:IsChargeReiatsuLikelyDead(target) then return end
 
     local puPos = self:GetPhysicsUnitPosition(target)
     if puPos == nil then return end
 
-    -- V3.6: pressione fisica a micro-pulse ravvicinati.
-    -- Non è forza continua ogni tick: è un impulso piccolo ma frequente,
-    -- così il tremore sembra costante senza accumulare caduta infinita.
+    -- Physical pressure is applied as small repeated pulses instead of continuous force,
+    -- creating a steady tremor without accumulating excessive downward velocity.
     local downForce = self.chargeReiatsuSmallEnemyDownForce or 4
     local force = UE.Vector3.down * downForce
 
@@ -3316,7 +3301,7 @@ function spellFireBall:ApplyChargeReiatsuToPhysicsUnit(pu, center, doInterrupt)
         end
     end)
 
-    -- 5) Pulse throwing come V3, ma solo sui target vivi/validi.
+    -- 5) Optional throwing pulse, limited to valid living targets.
     if doInterrupt and self.chargeReiatsuUseThrowingPulse then
         pcall(function()
             if target.muscleState ~= nil then
@@ -3550,8 +3535,8 @@ function spellFireBall:ApplyGravityToPhysicsUnit(pu, center)
     local puPos = self:GetPhysicsUnitPosition(pu)
     if puPos == nil then return end
 
-    -- V3: il risucchio deve vincere l'ancoraggio a terra.
-    -- Quindi tiriamo verso il centro alto + un piccolo lift, senza schiacciare verso il basso durante la fase di attrazione.
+    -- Pull toward the raised center with a small lift so containment can overcome ground anchoring
+    -- without forcing targets downward during the attraction phase.
     local toCenter = center - puPos
 
     local pullDir = UE.Vector3(0, 0, 0)
@@ -3871,9 +3856,7 @@ function spellFireBall:ApplyKurohitsugiAttrDamageToTarget(target)
         beforeHp = self:GetKurohitsugiAttrHpDebugValue(attr)
     end
 
-    -- V3 FIX:
-    -- ReduceHp nella documentazione ha default dhp=-100, quindi gli passiamo un delta NEGATIVO.
-    -- In V2 passavamo +amount: la chiamata risultava "applied", ma poteva non togliere HP.
+    -- ReduceHp expects a negative HP delta, so direct damage is applied as a negative value.
     pcall(function()
         if attr.ReduceHp ~= nil then
             attr:ReduceHp(damageDelta)
@@ -3987,7 +3970,7 @@ function spellFireBall:ApplySlashDamageToPhysicsUnit(pu, center, appliedMap)
 
     local applied = self:ApplyKurohitsugiAttrDamageToTarget(target)
 
-    -- Fallback opzionale: resta spento di default perché la V1 hit-scan non era affidabile.
+    -- Optional fallback, disabled by default because hit-scan damage was less reliable in testing.
     if not applied then
         applied = self:ApplyKurohitsugiHitScanDamageFallback(pu, target, center)
     end
