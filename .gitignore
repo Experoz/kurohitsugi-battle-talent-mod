@@ -38,4 +38,8 @@ BTModPush/
 
 # Local editor/tool folders
 .cursor/
+ADBTools//Assets/Mods/
+Assets/Mods/
+Assets/Mods/**
 ADBTools/
+ADBTools/**

@@ -1,0 +1,226 @@
+local flyFireBall = {
+    lifeTime = 4.0,
+    timer = 0,
+    hasImpacted = false,
+    hasExpired = false,
+
+    linesTime = 0.05,
+    wallsTime = 0.35,
+    topTime = 0.75,
+    effectsTime = 1.00,
+    spikesTime = 1.20,
+    spikeRetractTime = 2.10,
+    breakPiecesTime = 2.35,
+    hideTime = 3.30,
+
+    startedLines = false,
+    startedWalls = false,
+    startedTop = false,
+    startedEffects = false,
+    startedSpikes = false,
+    retractedSpikes = false,
+    startedBreakPieces = false,
+}
+
+local function Find(root, path)
+    if root == nil then
+        return nil
+    end
+
+    return root:Find(path)
+end
+
+local function SetActive(trans, active)
+    if trans ~= nil then
+        trans.gameObject:SetActive(active)
+    end
+end
+
+local function SetChildrenActive(root, active)
+    if root == nil then
+        return
+    end
+
+    for i = 0, root.childCount - 1 do
+        local child = root:GetChild(i)
+        if child then
+            child.gameObject:SetActive(active)
+        end
+    end
+end
+
+function flyFireBall:CacheRoots()
+    self.sequenceRoot = Find(self.trans, "KurohitsugiSequenceRoot")
+    self.linesRoot = Find(self.trans, "KurohitsugiSequenceRoot/LinesRoot")
+    self.wallsRoot = Find(self.trans, "KurohitsugiSequenceRoot/WallsRoot")
+    self.topRoot = Find(self.trans, "KurohitsugiSequenceRoot/TopRoot")
+    self.spikesRoot = Find(self.trans, "KurohitsugiSequenceRoot/SpikesRoot")
+    self.effectsRoot = Find(self.trans, "KurohitsugiSequenceRoot/EffectsRoot")
+    self.breakPiecesRoot = Find(self.trans, "KurohitsugiSequenceRoot/BreakPiecesRoot")
+end
+
+function flyFireBall:Start()
+    self.timer = 0
+    self.hasImpacted = false
+    self.hasExpired = false
+
+    self.startedLines = false
+    self.startedWalls = false
+    self.startedTop = false
+    self.startedEffects = false
+    self.startedSpikes = false
+    self.retractedSpikes = false
+    self.startedBreakPieces = false
+
+    self:CacheRoots()
+
+    SetActive(self.linesRoot, false)
+    SetActive(self.wallsRoot, false)
+    SetActive(self.topRoot, false)
+    SetActive(self.effectsRoot, false)
+    SetActive(self.breakPiecesRoot, false)
+
+    SetActive(self.spikesRoot, true)
+    SetChildrenActive(self.spikesRoot, false)
+end
+
+function flyFireBall:Update()
+    if self.hasExpired then
+        return
+    end
+
+    self.timer = self.timer + UE.Time.deltaTime
+
+    if self.timer >= self.linesTime and not self.startedLines then
+        self.startedLines = true
+        SetActive(self.linesRoot, true)
+    end
+
+    if self.timer >= self.wallsTime and not self.startedWalls then
+        self.startedWalls = true
+        SetActive(self.wallsRoot, true)
+    end
+
+    if self.timer >= self.topTime and not self.startedTop then
+        self.startedTop = true
+        SetActive(self.topRoot, true)
+    end
+
+    if self.timer >= self.effectsTime and not self.startedEffects then
+        self.startedEffects = true
+        SetActive(self.effectsRoot, true)
+    end
+
+    if self.timer >= self.spikesTime and not self.startedSpikes then
+        self.startedSpikes = true
+        SetActive(self.spikesRoot, true)
+        SetChildrenActive(self.spikesRoot, true)
+    end
+
+    if self.timer >= self.spikeRetractTime and not self.retractedSpikes then
+        self.retractedSpikes = true
+        SetChildrenActive(self.spikesRoot, false)
+    end
+
+    if self.timer >= self.breakPiecesTime and not self.startedBreakPieces then
+        self.startedBreakPieces = true
+
+        SetActive(self.linesRoot, false)
+        SetActive(self.wallsRoot, false)
+        SetActive(self.topRoot, false)
+        SetActive(self.spikesRoot, false)
+
+        SetActive(self.breakPiecesRoot, true)
+        SetChildrenActive(self.breakPiecesRoot, true)
+    end
+
+    if self.timer >= self.hideTime then
+        self:Expire()
+        return
+    end
+
+    if self.timer >= self.lifeTime then
+        self:Expire()
+    end
+end
+
+function flyFireBall:HideVisuals()
+    for i = 0, self.trans.childCount - 1 do
+        local child = self.trans:GetChild(i)
+        if child then
+            child.gameObject:SetActive(false)
+        end
+    end
+end
+
+function flyFireBall:DisableColliders()
+    local cols = self.trans:GetComponentsInChildren(typeof(UE.Collider), true)
+
+    for i = 0, cols.Length - 1 do
+        cols[i].enabled = false
+    end
+end
+
+function flyFireBall:StopMotion()
+    local rb = self.trans:GetComponent(typeof(UE.Rigidbody))
+
+    if rb then
+        rb.velocity = UE.Vector3.zero
+        rb.angularVelocity = UE.Vector3.zero
+        rb.isKinematic = true
+    end
+end
+
+function flyFireBall:Expire()
+    if self.hasExpired then
+        return
+    end
+
+    self.hasExpired = true
+
+    self:HideVisuals()
+    self:DisableColliders()
+    self:StopMotion()
+end
+
+function flyFireBall:DoImpact()
+    if self.hasImpacted then
+        return
+    end
+
+    self.hasImpacted = true
+
+    if CL.Network.VRNetworkManager.IsOnline and not CL.Network.VRNetworkManager.ServerOnline then
+        return
+    end
+
+    self.host:PlayImpact(self.trans.position, self.trans.forward)
+
+    -- Non chiamiamo Expire subito, altrimenti la sequenza visiva si spegne.
+    self.host:CollisionCountUpdate()
+end
+
+function flyFireBall:OnTrigger(pu, col)
+    if pu then
+        if pu.unitType == CL.Tagger.Tag.PlayerRole 
+            or pu.unitType == CL.Tagger.Tag.PlayerHand then
+            return
+        end
+    end
+
+    self:DoImpact()
+end
+
+function flyFireBall:OnTriggerWithStaticScene(col)
+    self:DoImpact()
+end
+
+function flyFireBall:OnTriggerWithPlayer(pu, col)
+    -- Non esplodere sul player/mano
+end
+
+function flyFireBall:OnTriggerWithRole(fc, col)
+    self:DoImpact()
+end
+
+return Class(Require("LuaScript/WMD_FlySpellBaseScript"), nil, flyFireBall)

@@ -1,0 +1,244 @@
+local KurohitsugiDamageBullet = {
+    pullForce = 8,
+    slamForce = 18,
+    pushForce = 8,
+    upForce = 2,
+
+    gravOffTime = 2.0,
+    knockout = true,
+
+    alreadyHit = false,
+    isFlying = false,
+    delayActId = nil,
+}
+
+function KurohitsugiDamageBullet:FlyStart()
+    self.isFlying = true
+    self.alreadyHit = false
+
+    pcall(function()
+        if self.host ~= nil and self.host.rb ~= nil then
+            self.host.rb.isKinematic = false
+            self.host.rb.useGravity = false
+        end
+    end)
+
+    pcall(function()
+        if self.host ~= nil and self.host.trans ~= nil then
+            self.host.trans.parent = nil
+        end
+    end)
+
+    pcall(function()
+        if self.host ~= nil and self.host.col ~= nil then
+            self.host.col.isTrigger = false
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:ResetState()
+    self.delayActId = CL.Scheduler.RemoveSchedule(self.delayActId)
+    self.alreadyHit = false
+    self.isFlying = false
+
+    pcall(function()
+        if self.trans ~= nil then
+            self.trans.localScale = UE.Vector3.one
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:FinishBullet()
+    self.delayActId = CL.Scheduler.RemoveSchedule(self.delayActId)
+
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+
+    pcall(function()
+        if self.host ~= nil then
+            self.host:DoFinish()
+        end
+    end)
+
+    self.isFlying = false
+end
+
+function KurohitsugiDamageBullet:FinishBulletDelayed(delay)
+    if delay == nil then
+        delay = 0.08
+    end
+
+    local owner = self
+
+    self.delayActId = CL.Scheduler.Create({},
+        function()
+            if owner ~= nil then
+                owner:FinishBullet()
+            end
+        end,
+    delay, 1).actionId
+end
+
+function KurohitsugiDamageBullet:GetCenterPos()
+    if self.host ~= nil and self.host.trans ~= nil then
+        return self.host.trans.position
+    end
+
+    if self.trans ~= nil then
+        return self.trans.position
+    end
+
+    return UE.Vector3.zero
+end
+
+function KurohitsugiDamageBullet:GetPullDirection(rb)
+    local center = self:GetCenterPos()
+    local dir = UE.Vector3(0, 0, 1)
+
+    if rb ~= nil then
+        local toCenter = center - rb.position
+        toCenter.y = 0
+
+        if toCenter.sqrMagnitude > 0.001 then
+            dir = toCenter.normalized
+        end
+    end
+
+    return dir
+end
+
+function KurohitsugiDamageBullet:IsWeaponMuscle(mu)
+    if mu == nil then return false end
+    if mu.muscleName == nil then return false end
+    if CL.RagdollBoneInfo == nil then return false end
+    if CL.RagdollBoneInfo.Weapon == nil then return false end
+
+    return string.find(mu.muscleName, CL.RagdollBoneInfo.Weapon) ~= nil
+end
+
+function KurohitsugiDamageBullet:ApplyKurohitsugiEffect(fc, mu, rb)
+    if self.alreadyHit then return end
+    if fc == nil then return end
+
+    if mu ~= nil and self:IsWeaponMuscle(mu) then
+        return
+    end
+
+    self.alreadyHit = true
+
+    local pullDir = self:GetPullDirection(rb)
+
+    pcall(function()
+        fc:DisableGravityAWhile(self.gravOffTime)
+    end)
+
+    pcall(function()
+        fc:AddForce(pullDir * self.pullForce)
+    end)
+
+    pcall(function()
+        fc:AddForce(UE.Vector3.down * self.slamForce)
+    end)
+
+    pcall(function()
+        fc:AddForce(UE.Vector3.up * self.upForce)
+    end)
+
+    if self.knockout then
+        pcall(function()
+            fc.motion:Knockout()
+        end)
+    end
+
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+
+    self:FinishBulletDelayed(0.08)
+end
+
+function KurohitsugiDamageBullet:OnCollision(collision)
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:OnTrigger(pu, col)
+    if not col or IsNullOrDestroyed(col) then
+        return
+    end
+
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:OnCollisionWithStaticScene(col)
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:OnTriggerWithStaticScene(col)
+    pcall(function()
+        if self.host ~= nil then
+            self.host:CollisionCountUpdate()
+        end
+    end)
+end
+
+function KurohitsugiDamageBullet:OnCollisionWithPlayer(pu, col)
+    -- Non colpiamo il player.
+end
+
+function KurohitsugiDamageBullet:OnTriggerWithPlayer(pu, col)
+    -- Non colpiamo il player.
+end
+
+function KurohitsugiDamageBullet:OnCollisionWithRole(fc, mu, rb, col, point, normal, relaVel)
+    pcall(function()
+        if self.host ~= nil then
+            self.host:PlayImpact(self.trans.position, self.trans.forward)
+        end
+    end)
+
+    self:ApplyKurohitsugiEffect(fc, mu, rb)
+end
+
+function KurohitsugiDamageBullet:OnTriggerWithRole(fc, mu, rb, col, point, normal, relaVel)
+    pcall(function()
+        if self.host ~= nil then
+            self.host:PlayImpact(self.trans.position, self.trans.forward)
+        end
+    end)
+
+    self:ApplyKurohitsugiEffect(fc, mu, rb)
+end
+
+function KurohitsugiDamageBullet:OnTimeOut()
+    self:FinishBullet()
+end
+
+function KurohitsugiDamageBullet:OnFinish()
+    self.isFlying = false
+end
+
+function KurohitsugiDamageBullet:EnhanceSpell()
+end
+
+function KurohitsugiDamageBullet:SetOwner(owner)
+    self.owner = owner
+end
+
+return Class(nil, nil, KurohitsugiDamageBullet)
