@@ -16,6 +16,16 @@ The mod is available on mod.io for Battle Talent:
 
 ---
 
+## Project Documentation
+
+Additional technical documentation:
+
+- [Technical Breakdown](docs/TECHNICAL_BREAKDOWN.md)
+- [AI-Assisted Development Workflow](docs/AI_ASSISTED_WORKFLOW.md)
+
+---
+
+
 ## Features
 
 * Standalone spell gem for Battle Talent
