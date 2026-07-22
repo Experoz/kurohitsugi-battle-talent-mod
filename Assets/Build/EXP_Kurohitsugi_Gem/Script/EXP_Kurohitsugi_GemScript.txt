@@ -5290,4 +5290,4 @@ end
 -- BASE CLASS BINDING
 -- =========================================================
 
-return Class(Require("LuaScript/WMD_SpellThrowScript"), nil, spellFireBall)
+return Class(nil, nil, spellFireBall)
